@@ -1,24 +1,19 @@
-version: 2.1
+version: 2
 #orbs:
 #  codecov: codecov/codecov@1.0.2
 jobs:
   build:
     docker:
-      #- image: rauc/testing:latest
-      - image: multiarch/debian-debootstrap:armhf-buster
+      - image: rauc/testing:latest
 
     steps:
       - checkout
 
-      - run:
-          name: Greeting
-          command: uname -a
-
-      - run:
-          name: Install dependencies
-          command: |
-            apt update -q
-            apt install -y build-essential automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
+      #- run:
+      #    name: Install dependencies
+      #    command: |
+      #      apt update -q
+      #      apt install -y build-essential automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
 
       - run:
           name: Run autogen.sh
@@ -39,3 +34,8 @@ jobs:
       - run:
           name: Upload coverage
           command: bash <(curl -s https://codecov.io/bash)
+workflows:
+  version: 2
+  workflow:
+    jobs:
+    - build
