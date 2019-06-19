@@ -61,3 +61,14 @@ after_failure:
   - cat test/*.log || true
   - cat test-suite.log || true
   - cat rauc-*/_build/sub/test-suite.log || true
+
+matrix:
+  include:
+    - name: armhf
+      install:
+        - docker run --rm --privileged multiarch/qemu-user-static:register --reset
+      script:
+        - docker run -it multiarch/debian-debootstrap:armhf-buster uname -a
+        - docker run -it multiarch/debian-debootstrap:armhf-buster ./autogen.sh
+        - docker run -it multiarch/debian-debootstrap:armhf-buster ./configure
+        - docker run -it multiarch/debian-debootstrap:armhf-buster make
