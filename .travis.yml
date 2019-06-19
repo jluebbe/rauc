@@ -82,7 +82,7 @@ matrix:
       after_script:
         - docker stop cross
       after_failure:
-        - cat config.log | tail -n 200 || true
+        - cat config.log || true
         - cat test/*.log || true
         - cat test-suite.log || true
         - cat rauc-*/_build/sub/test-suite.log || true
