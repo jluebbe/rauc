@@ -1,0 +1,32 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: rauc/testing:latest
+
+    steps:
+      - checkout
+
+      - run:
+          name: Greeting
+          command: uname -a
+
+      - run:
+          name: Print the Current Time
+          command: date
+
+      - run:
+          name: Run autogen.sh
+          command: ./autogen.sh
+
+      - run:
+          name: Run configure
+          command: ./configure --enable-code-coverage
+
+      - run:
+          name: Build
+          command: make
+
+      - run:
+          name: Test
+          command: make check
