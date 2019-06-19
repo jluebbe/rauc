@@ -93,7 +93,7 @@ matrix:
     - name: coverage
       install:
         - sudo apt-get update -q
-        - sudo apt-get install -y automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
+        - sudo apt-get install -y automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
       script:
         - ./autogen.sh
         - ./configure --enable-code-coverage
