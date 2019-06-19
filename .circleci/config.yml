@@ -5,7 +5,7 @@ jobs:
   build:
     docker:
       #- image: rauc/testing:latest
-      - image: multiarch/debian-debootstrap:amd64-buster
+      - image: multiarch/debian-debootstrap:armhf-buster
 
     steps:
       - checkout

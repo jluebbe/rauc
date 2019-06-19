@@ -90,6 +90,14 @@ matrix:
       name: arm64
       install:
         - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:arm64-buster bash
+    - <<: *cross
+      name: i386
+      install:
+        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:i386-buster bash
+    - <<: *cross
+      name: mips
+      install:
+        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:mips-buster bash
     - name: coverage
       install:
         - sudo apt update -q
