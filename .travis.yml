@@ -66,17 +66,23 @@ matrix:
         - cat test/*.log || true
         - cat test-suite.log || true
         - cat rauc-*/_build/sub/test-suite.log || true
-    - name: armhf
+    - &cross
+      name: armhf
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       install:
         - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:armhf-buster bash
       before_script:
         - docker exec -it cross uname -a
-        - docker exec -it cross apt-get install apt-get install automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
+        - docker exec -it cross apt-get update
+        - docker exec -it cross apt-get install automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
       script:
         - docker exec -it cross ./autogen.sh
         - docker exec -it cross ./configure
         - docker exec -it cross make
       after_script:
         - docker stop cross
+    - <<: *cross
+      name: arm64
+      install:
+        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:arm64-buster bash
