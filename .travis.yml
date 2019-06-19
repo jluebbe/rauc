@@ -64,16 +64,17 @@ after_failure:
 
 matrix:
   include:
+    - name: base
     - name: armhf
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       install:
         - docker run --name cross -dit multiarch/debian-debootstrap:armhf-buster bash
       before_script:
-        - docker run -it cross uname -a
+        - docker exec -it cross uname -a
       script:
-        - docker run -it cross ./autogen.sh
-        - docker run -it cross ./configure
-        - docker run -it cross make
+        - docker exec -it cross ./autogen.sh
+        - docker exec -it cross ./configure
+        - docker exec -it cross make
       after_script:
         - docker stop cross
