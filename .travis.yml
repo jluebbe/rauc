@@ -11,7 +11,6 @@ env:
     - COVERITY_SCAN_BUILD_COMMAND_PREPEND="cov-configure --comptype gcc --compiler gcc-6 --template && ./autogen.sh && ./configure CC=gcc-6"
     - COVERITY_SCAN_BUILD_COMMAND="make V=1"
 
-
 matrix:
   include:
     - name: base
@@ -60,8 +59,8 @@ matrix:
         - docker exec -it rauc-ci make distcheck
         - docker exec -it rauc-ci /bin/sh -c 'cd /home/travis/contrib/cgi && ./autogen.sh && ./configure && make clean && make -j2 && make distcheck'
         - ./uncrustify.sh && git diff --exit-code
-      after_success:
-        - docker exec -it rauc-ci /usr/bin/codecov -t $CODECOV_TOKEN
+      #after_success:
+        #- docker exec -it rauc-ci /usr/bin/codecov -t $CODECOV_TOKEN
       after_failure:
         - cat test/*.log || true
         - cat test-suite.log || true
@@ -75,7 +74,7 @@ matrix:
       before_script:
         - docker exec -it cross uname -a
         - docker exec -it cross apt-get update
-        - docker exec -it cross apt-get install automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
+        - docker exec -it cross apt-get install -y automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
       script:
         - docker exec -it cross ./autogen.sh
         - docker exec -it cross ./configure
@@ -86,3 +85,16 @@ matrix:
       name: arm64
       install:
         - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:arm64-buster bash
+    - name: coverage
+      install:
+        - sudo apt-get update -q
+        - sudo apt-get install -y automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev
+      script:
+        - ./autogen.sh
+        - ./configure --enable-code-coverage
+        - make clean
+        - make -j2
+        - make check
+      after_success:
+        - bash <(curl -s https://codecov.io/bash)
+
