@@ -92,8 +92,8 @@ matrix:
         - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:arm64-buster bash
     - name: coverage
       install:
-        - sudo apt-get update -q
-        - sudo apt-get install -y automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
+        - sudo apt update -q
+        - sudo apt install -y automake build-essential libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
       script:
         - ./autogen.sh
         - ./configure --enable-code-coverage

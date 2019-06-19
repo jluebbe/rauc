@@ -4,7 +4,8 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: rauc/testing:latest
+      #- image: rauc/testing:latest
+      - image: multiarch/debian-debootstrap:amd64-buster
 
     steps:
       - checkout
@@ -14,8 +15,10 @@ jobs:
           command: uname -a
 
       - run:
-          name: Print the Current Time
-          command: date
+          name: Install dependencies
+          command: |
+            apt update -q
+            apt install -y build-essential automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
 
       - run:
           name: Run autogen.sh
