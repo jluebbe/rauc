@@ -69,7 +69,7 @@ matrix:
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
       install:
-        - docker run --name cross -dit multiarch/debian-debootstrap:armhf-buster bash
+        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:armhf-buster bash
       before_script:
         - docker exec -it cross uname -a
       script:
