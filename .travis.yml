@@ -95,9 +95,9 @@ matrix:
       install:
         - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:i386-buster bash
     - <<: *cross
-      name: mipsel
+      name: armel
       install:
-        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:mipsel-buster bash
+        - docker run --name cross -dit -v "$PWD":/home -w /home multiarch/debian-debootstrap:armel-buster bash
     - name: coverage
       install:
         - sudo apt update -q
