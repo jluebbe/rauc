@@ -5,37 +5,50 @@ jobs:
   build:
     docker:
       - image: rauc/testing:latest
-
     steps:
       - checkout
-
       #- run:
       #    name: Install dependencies
       #    command: |
       #      apt update -q
       #      apt install -y build-essential automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov
-
       - run:
           name: Run autogen.sh
           command: ./autogen.sh
-
       - run:
           name: Run configure
           command: ./configure --enable-code-coverage
-
       - run:
           name: Build
           command: make
-
       - run:
           name: Test
           command: make check
-
       - run:
           name: Upload coverage
           command: bash <(curl -s https://codecov.io/bash)
+  clang-7:
+    docker:
+      - image: rauc/testing:latest
+    steps:
+      - checkout
+      - run:
+          name: Install dependencies
+          command: |
+            apt update -q
+            apt install -y build-essential automake libtool libglib2.0-dev libcurl3-dev libssl-dev libjson-glib-dev lcov clang-7
+      - run:
+          name: Run autogen.sh
+          command: ./autogen.sh
+      - run:
+          name: Run configure
+          command: CC=clang-8 ./configure --enable-code-coverage
+      - run:
+          name: Build
+          command: make
 workflows:
   version: 2
   workflow:
     jobs:
     - build
+    - clang-7
