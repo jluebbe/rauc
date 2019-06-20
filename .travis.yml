@@ -11,9 +11,13 @@ env:
     - COVERITY_SCAN_BUILD_COMMAND_PREPEND="cov-configure --comptype gcc --compiler gcc-6 --template && ./autogen.sh && ./configure CC=gcc-6"
     - COVERITY_SCAN_BUILD_COMMAND="make V=1"
 
-matrix:
+stages:
+  - name: Main Build and Tests
+  - name: Cross-Builds
+
+jobs:
   include:
-    - name: base
+    - stage: Main Build and Tests
       before_script:
         - docker pull rauc/testing:latest
 
@@ -67,6 +71,7 @@ matrix:
         - cat test-suite.log || true
         - cat rauc-*/_build/sub/test-suite.log || true
     - &cross
+      stage: Cross-Builds
       name: armhf
       before_install:
         - docker run --rm --privileged multiarch/qemu-user-static:register --reset
