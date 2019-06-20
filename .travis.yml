@@ -65,7 +65,7 @@ jobs:
         - ./uncrustify.sh && git diff --exit-code
       after_success:
         - docker exec -it rauc-ci /bin/sh -c 'find . -type f -name *.gcno -exec gcov -pbr {} +'
-        - docker exec -it rauc-ci '/usr/bin/codecov -X gcov'
+        - docker exec -it rauc-ci /usr/bin/codecov -X gcov
       after_failure:
         - cat test/*.log || true
         - cat test-suite.log || true
