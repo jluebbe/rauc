@@ -44,7 +44,6 @@ AC_ARG_ENABLE([service],
 )
 AS_IF([test "x$enable_service" != "xno"], [
 	AC_DEFINE([ENABLE_SERVICE], [1], [Define to 1 to enable background service])
-	PKG_CHECK_MODULES([DBUS1], [dbus-1])
 ], [
 	AC_DEFINE([ENABLE_SERVICE], [0])
 ])
@@ -100,21 +99,30 @@ AM_CONDITIONAL(SYSTEMD, test -n "${with_systemdunitdir}")
 AC_ARG_WITH([dbuspolicydir],
         AS_HELP_STRING([--with-dbuspolicydir=DIR], [D-Bus policy directory]),
         [],
-        [with_dbuspolicydir="$($PKG_CONFIG --variable=datadir dbus-1)/dbus-1/system.d"])
+        [
+	 PKG_CHECK_MODULES([DBUS1], [dbus-1])
+	 with_dbuspolicydir="$($PKG_CONFIG --variable=datadir dbus-1)/dbus-1/system.d"
+	])
 DBUS_POLICYDIR="${with_dbuspolicydir}"
 AC_SUBST(DBUS_POLICYDIR)
 
 AC_ARG_WITH([dbussystemservicedir],
         AS_HELP_STRING([--with-dbussystemservicedir=DIR], [D-Bus system service directory]),
         [],
-        [with_dbussystemservicedir="$($PKG_CONFIG --variable=system_bus_services_dir dbus-1)"])
+        [
+	 PKG_CHECK_MODULES([DBUS1], [dbus-1])
+	 with_dbussystemservicedir="$($PKG_CONFIG --variable=system_bus_services_dir dbus-1)"
+	])
 DBUS_SYSTEMSERVICEDIR="${with_dbussystemservicedir}"
 AC_SUBST(DBUS_SYSTEMSERVICEDIR)
 
 AC_ARG_WITH([dbusinterfacesdir],
         AS_HELP_STRING([--with-dbusinterfacesdir=DIR], [D-Bus interfaces directory]),
         [],
-        [with_dbusinterfacesdir="$($PKG_CONFIG --variable=interfaces_dir dbus-1)"])
+        [
+	 PKG_CHECK_MODULES([DBUS1], [dbus-1])
+	 with_dbusinterfacesdir="$($PKG_CONFIG --variable=interfaces_dir dbus-1)"
+	])
 DBUS_INTERFACESDIR="${with_dbusinterfacesdir}"
 AC_SUBST(DBUS_INTERFACESDIR)
 
