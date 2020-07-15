@@ -1,6 +1,6 @@
 FROM debian:buster
 
-# Required for building (base)
+# Required for building
 RUN apt-get update && apt-get install -y \
   automake \
   libtool \
@@ -8,9 +8,6 @@ RUN apt-get update && apt-get install -y \
   libcurl3-dev \
   libssl-dev \
   libdbus-1-dev
-
-# Reqired for building (extended)
-RUN apt-get update && apt-get install -y \
   libjson-glib-dev \
   libfdisk-dev
 
