@@ -1,5 +1,6 @@
 #include <locale.h>
 #include <unistd.h>
+#include <errno.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 #include <fcntl.h>
@@ -65,20 +66,34 @@ static void drop_caches(void)
 	g_close(fd, NULL);
 }
 
-static guint readable_sectors(int fd)
+static gint readable_sectors(int fd, guint8 *content, off_t size)
 {
 	guint8 buf[4096];
-	ssize_t r;
-	guint sectors = 0;
+	gint sectors = 0;
 
 	lseek(fd, 0, SEEK_SET);
 
 	for (guint sector = 0;; sector++) {
-		r = pread(fd, buf, sizeof(buf), sector*sizeof(buf));
-		if (r == 0)
+		ssize_t r = pread(fd, buf, sizeof(buf), sector*sizeof(buf));
+
+		if (r == 0) {
 			break;
-		else if (r == sizeof(buf))
-			sectors++;
+		} else if (r < 0) {
+			g_test_message("%s: error while reading sector %u: %s", G_STRFUNC, sector, g_strerror(errno));
+		} else if (r != sizeof(buf)) {
+			g_test_message("%s: read only %ld bytes in sector %u", G_STRFUNC, r, sector);
+			g_test_fail();
+			return -1;
+		} else {
+			g_assert((sector*4096 + r) <= size);
+			if (memcmp(buf, &content[sector * 4096], 4096) != 0) {
+				g_test_message("%s: difference found in sector %u", G_STRFUNC, sector);
+				g_test_fail();
+				return -1;
+			} else {
+				sectors++;
+			}
+		}
 	}
 	return sectors;
 }
@@ -204,6 +219,7 @@ static void verity_hash_create(DMFixture *fixture,
 		gconstpointer user_data)
 {
 	g_autoptr(GError) error = NULL;
+	g_autofree guint8 *content = NULL;
 	const DMData *dm_data = user_data;
 	int ret, bundlefd;
 	guint8 root_hash[32] = {0};
@@ -218,8 +234,10 @@ static void verity_hash_create(DMFixture *fixture,
 	if (!test_running_as_root())
 		return;
 
-	filename = write_random_file(fixture->tmpdir, "data", 4096*dm_data->data_size, 0x0fdfc761);
+	filename = g_build_filename(fixture->tmpdir, "data", NULL);
 	g_assert_nonnull(filename);
+	content = random_bytes(4096*dm_data->data_size, 0x0fdfc761);
+	g_assert_true(g_file_set_contents(filename, (gchar *)content, 4096*dm_data->data_size, NULL));
 
 	bundlefd = g_open(filename, O_RDWR);
 	g_assert_cmpint(bundlefd, >, 0);
@@ -241,7 +259,7 @@ static void verity_hash_create(DMFixture *fixture,
 
 	/* check that everything is readable */
 	drop_caches();
-	g_assert_cmpint(readable_sectors(dmfd), ==, dm_data->data_size);
+	g_assert_cmpint(readable_sectors(dmfd, content, 4096*dm_data->data_size), ==, dm_data->data_size);
 
 	g_test_message("checking error detection in the first sector");
 	/* flip one bit in the first sector */
@@ -253,7 +271,7 @@ static void verity_hash_create(DMFixture *fixture,
 
 	/* check that only the affected sector is unreadable */
 	drop_caches();
-	g_assert_cmpint(readable_sectors(dmfd), ==, dm_data->data_size - 1);
+	g_assert_cmpint(readable_sectors(dmfd, content, 4096*dm_data->data_size), ==, dm_data->data_size - 1);
 
 	g_close(dmfd, NULL);
 
@@ -280,7 +298,7 @@ static void verity_hash_create(DMFixture *fixture,
 
 		/* check that only the affected sector is unreadable */
 		drop_caches();
-		g_assert_cmpint(readable_sectors(dmfd), ==, dm_data->data_size - 1);
+		g_assert_cmpint(readable_sectors(dmfd, content, 4096*dm_data->data_size), ==, dm_data->data_size - 1);
 
 		/* check that the bit flip is detected by the userspace check */
 		ret = verity_create_or_verify_hash(1, bundlefd, dm_data->data_size, NULL, root_hash, salt);
