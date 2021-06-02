@@ -88,6 +88,19 @@ AS_IF([test "x$enable_network" = "xyes"], [
 ])
 
 
+AC_ARG_ENABLE([streaming],
+       AS_HELP_STRING([--disable-streaming], [Disable streaming update mode])
+)
+AM_CONDITIONAL([WANT_STREAMING], [test x$enable_streaming != xno])
+AS_IF([test "x$enable_streaming" != "xno"], [
+       # FIXME depend on network mode
+       AC_DEFINE([ENABLE_STREAMING], [1], [Define to 1 to enable building with streaming update support])
+       PKG_CHECK_MODULES([NL3], [libnl-genl-3.0 >= 3.1])
+], [
+       AC_DEFINE([ENABLE_STREAMING], [0])
+])
+
+
 AC_ARG_ENABLE([json],
         AS_HELP_STRING([--disable-json], [Disable JSON support])
 )
