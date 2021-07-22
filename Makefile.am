@@ -150,6 +150,7 @@ check_PROGRAMS = \
 	test/context.test \
 	test/dm.test \
 	test/manifest.test \
+	test/nbd.test \
 	test/signature.test \
 	test/update_handler.test \
 	test/utils.test \
@@ -229,6 +230,9 @@ test_dm_test_LDADD = librauctest.la
 
 test_manifest_test_SOURCES = test/manifest.c
 test_manifest_test_LDADD = librauctest.la
+
+test_nbd_test_SOURCES = test/nbd.c
+test_nbd_test_LDADD = librauctest.la
 
 test_service_test_CFLAGS = $(AM_CFLAGS) -DTEST_SERVICES=\""$(abs_top_builddir)"\"
 test_service_test_SOURCES = test/service.c rauc-installer-generated.h
