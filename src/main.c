@@ -235,12 +235,32 @@ static gboolean install_start(int argc, char **argv)
 	args->status_result = 2;
 
 	args->ignore_compatible = install_ignore_compatible;
+	if (access_args.tls_cert)
+		args->access_args.tls_cert = g_strdup(access_args.tls_cert);
+	if (access_args.tls_key)
+		args->access_args.tls_key = g_strdup(access_args.tls_key);
+	if (access_args.tls_ca)
+		args->access_args.tls_ca = g_strdup(access_args.tls_ca);
+	if (access_args.tls_no_verify)
+		args->access_args.tls_no_verify = access_args.tls_no_verify;
+	if (access_args.http_headers)
+		args->access_args.http_headers = g_strdupv(access_args.http_headers);
 
 	r_loop = g_main_loop_new(NULL, FALSE);
 	if (ENABLE_SERVICE) {
 		g_auto(GVariantDict) dict = G_VARIANT_DICT_INIT(NULL);
 
 		g_variant_dict_insert(&dict, "ignore-compatible", "b", args->ignore_compatible);
+		if (args->access_args.tls_cert)
+			g_variant_dict_insert(&dict, "tls-cert", "s", args->access_args.tls_cert);
+		if (args->access_args.tls_key)
+			g_variant_dict_insert(&dict, "tls-key", "s", args->access_args.tls_key);
+		if (args->access_args.tls_ca)
+			g_variant_dict_insert(&dict, "tls-ca", "s", args->access_args.tls_ca);
+		if (args->access_args.tls_no_verify)
+			g_variant_dict_insert(&dict, "tls-no-verify", "b", args->access_args.tls_no_verify);
+		if (args->access_args.http_headers)
+			g_variant_dict_insert(&dict, "http-headers", "^as", args->access_args.http_headers);
 
 		installer = r_installer_proxy_new_for_bus_sync(bus_type,
 				G_DBUS_PROXY_FLAGS_GET_INVALIDATED_PROPERTIES,
@@ -880,7 +900,7 @@ static gboolean info_start(int argc, char **argv)
 		goto out;
 	g_debug("input bundle: %s", bundlelocation);
 
-	res = check_bundle(bundlelocation, &bundle, !verification_disabled, NULL, &error);
+	res = check_bundle(bundlelocation, &bundle, !verification_disabled, &access_args, &error);
 	if (!res) {
 		g_printerr("%s\n", error->message);
 		g_clear_error(&error);
@@ -2040,6 +2060,11 @@ int main(int argc, char **argv)
 	setlocale(LC_ALL, "");
 	if (g_get_charset(NULL))
 		utf8_supported = TRUE;
+
+	if (g_getenv("RAUC_NBD_SERVER")) {
+		pthread_setname_np(pthread_self(), "rauc-nbd");
+		return nbd_server_main(3, NULL) ? 0 : 1;
+	}
 
 	create_option_groups();
 	cmdline_handler(argc, argv);
