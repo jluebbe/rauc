@@ -1638,6 +1638,56 @@ static gboolean service_start(int argc, char **argv)
 	return TRUE;
 }
 
+static gboolean mount_start(int argc, char **argv)
+{
+	g_autofree gchar *bundlelocation = NULL;
+	g_autoptr(RaucBundle) bundle = NULL;
+	GError *error = NULL;
+	gboolean res = FALSE;
+
+	if (argc < 3) {
+		g_printerr("A file name must be provided\n");
+		r_exit_status = 1;
+		return FALSE;
+	}
+
+	if (argc > 3) {
+		g_printerr("Excess argument: %s\n", argv[3]);
+		r_exit_status = 1;
+		goto out;
+	}
+
+	bundlelocation = resolve_bundle_path(argv[2]);
+	if (bundlelocation == NULL)
+		goto out;
+	g_debug("input bundle: %s", bundlelocation);
+
+	res = check_bundle(bundlelocation, &bundle, TRUE, &error);
+	if (!res) {
+		g_printerr("%s\n", error->message);
+		g_clear_error(&error);
+		goto out;
+	}
+
+	g_message("bundle payload size: %"G_GOFFSET_FORMAT, bundle->size);
+
+	res = mount_bundle(bundle, &error);
+	if (!res) {
+		g_printerr("%s\n", error->message);
+		g_clear_error(&error);
+		goto out;
+	}
+
+	g_message("bundle mounted at: %s", bundle->mount_point);
+
+	/* The mount keeps the block device active. */
+	exit(0);
+
+out:
+	r_exit_status = res ? 0 : 1;
+	return TRUE;
+}
+
 static gboolean unknown_start(int argc, char **argv)
 {
 	g_debug("unknown start");
@@ -1656,6 +1706,7 @@ typedef enum  {
 	INFO,
 	WRITE_SLOT,
 	SERVICE,
+	MOUNT,
 } RaucCommandType;
 
 typedef struct {
@@ -1797,6 +1848,7 @@ static void cmdline_handler(int argc, char **argv)
 #if ENABLE_SERVICE == 1
 		{SERVICE, "service", "service", "Start RAUC service", service_start, service_group, TRUE},
 #endif
+		{MOUNT, "mount", "mount <BUNDLENAME>", "Mount RAUC bundle", mount_start, NULL, TRUE},
 		{0}
 	};
 	RaucCommand *rc;
