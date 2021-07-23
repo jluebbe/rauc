@@ -85,7 +85,7 @@ if WANT_GPT
 librauc_la_SOURCES += src/gpt.c
 endif
 
-if WANT_STREAMING
+if ENABLE_STREAMING
 librauc_la_SOURCES += src/nbd.c include/nbd.h
 endif
 
