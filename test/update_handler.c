@@ -280,11 +280,11 @@ static void test_update_handler(UpdateHandlerFixture *fixture,
 	}
 
 	if (g_strcmp0(test_pair->imagetype, "img") == 0) {
-		g_assert(test_prepare_dummy_file(fixture->tmpdir, "image.img",
-				IMAGE_SIZE, "/dev/zero") == 0);
+		g_autofree gchar* pathname = write_random_file(fixture->tmpdir, "image.img", IMAGE_SIZE, 0x2abff992);
+		g_assert_nonnull(pathname);
 	} else if (g_strcmp0(test_pair->imagetype, "ext4") == 0) {
-		g_assert(test_prepare_dummy_file(fixture->tmpdir, "image.ext4",
-				IMAGE_SIZE, "/dev/zero") == 0);
+		g_autofree gchar* pathname = write_random_file(fixture->tmpdir, "image.ext4", IMAGE_SIZE, 0x457c0140);
+		g_assert_nonnull(pathname);
 		g_assert(test_make_filesystem(fixture->tmpdir, "image.ext4"));
 	} else if (g_strcmp0(test_pair->imagetype, "tar.bz2") == 0) {
 		g_assert_true(test_prepare_dummy_archive(fixture->tmpdir, "image.tar.bz2", "testfile.txt"));

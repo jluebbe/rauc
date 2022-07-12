@@ -167,11 +167,11 @@ compatible=Test Config\n\
 \n\
 [image.rootfs]\n\
 filename=rootfs.ext4\n\
-incremental=invalid-method;another-invalid-method";
+incremental=block-hash-index;invalid-method;another-invalid-method";
 
 	fixture->tmpdir = g_dir_make_tmp("rauc-XXXXXX", NULL);
 
-	fixture_helper_set_up_system(fixture->tmpdir, NULL);
+	fixture_helper_set_up_system(fixture->tmpdir, "test/test-datadir.conf");
 	fixture_helper_set_up_bundle(fixture->tmpdir, manifest_file, &data->manifest_test_options);
 }
 
