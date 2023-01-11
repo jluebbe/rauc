@@ -31,6 +31,8 @@ typedef struct {
 	gchar* filename;
 	SlotHooks hooks;
 	GStrv adaptive;
+	GStrv convert;
+	GStrv converted;
 } RaucImage;
 
 typedef enum {
