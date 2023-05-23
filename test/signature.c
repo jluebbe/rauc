@@ -148,8 +148,8 @@ static void signature_sign_inline(SignatureFixture *fixture,
 static void signature_sign_file(SignatureFixture *fixture,
 		gconstpointer user_data)
 {
-	gchar *certpath = g_strdup("test/openssl-ca/rel/release-1.cert.pem");
-	gchar *keypath = g_strdup("test/openssl-ca/rel/private/release-1.pem");
+	const gchar *certpath = "test/openssl-ca/rel/release-1.cert.pem";
+	const gchar *keypath = "test/openssl-ca/rel/private/release-1.pem";
 
 	// Test valid file
 	fixture->sig = cms_sign_file("test/openssl-ca/manifest",
