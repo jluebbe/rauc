@@ -615,6 +615,7 @@ static void start_request(struct RaucNBDContext *ctx, struct RaucNBDTransfer *xf
 		}
 		case NBD_CMD_DISC: {
 			g_message("disconnect");
+			g_free(xfer);
 			ctx->done = TRUE;
 			break;
 		}
