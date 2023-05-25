@@ -900,6 +900,7 @@ gboolean r_nbd_run_server(gint sock, GError **error)
 
 			res = finish_request(&ctx, xfer);
 			if (!res) {
+				g_free(xfer);
 				g_set_error(
 						error,
 						R_NBD_ERROR, R_NBD_ERROR_SHUTDOWN,
