@@ -92,7 +92,7 @@ static void on_installer_changed(GDBusProxy *proxy, GVariant *changed,
 	GQueue *args = data;
 	gchar *msg;
 	gint32 percentage, depth;
-	const gchar *message = NULL;
+	g_autofree gchar *message = NULL;
 
 	if (g_variant_lookup(changed, "Operation", "s", &msg)) {
 		g_message("Operation: %s", msg);
@@ -100,11 +100,14 @@ static void on_installer_changed(GDBusProxy *proxy, GVariant *changed,
 	if (g_variant_lookup(changed, "Progress", "(isi)", &percentage, &message, &depth)) {
 		g_autoptr(GVariant) var = g_queue_pop_head(args);
 		gint32 cmp_percentage, cmp_depth;
-		const gchar *cmp_message;
+		g_autofree gchar *cmp_message = NULL;
 
-		cmp_percentage = g_variant_get_int32(g_variant_get_child_value(var, 0));
-		cmp_message = g_variant_get_string(g_variant_get_child_value(var, 1), NULL);
-		cmp_depth = g_variant_get_int32(g_variant_get_child_value(var, 2));
+		g_assert_nonnull(var);
+
+		g_assert_true(g_variant_is_floating(var));
+		g_variant_get_child(var, 0, "i", &cmp_percentage);
+		g_variant_get_child(var, 1, "s", &cmp_message);
+		g_variant_get_child(var, 2, "i", &cmp_depth);
 		g_message("Progress changed: %03d, %s, %d", percentage, message, depth);
 		g_assert_cmpint(percentage, ==, cmp_percentage);
 		g_assert_cmpstr(message, ==, cmp_message);
@@ -260,6 +263,8 @@ static void service_test_install(ServiceFixture *fixture, gconstpointer user_dat
 	g_main_loop_run(testloop);
 
 	g_clear_object(&installer);
+
+	g_assert_cmpuint(args->length, ==, 0);
 }
 
 static void service_test_install_bundle(ServiceFixture *fixture, gconstpointer user_data)
