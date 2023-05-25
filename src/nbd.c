@@ -823,7 +823,7 @@ gboolean r_nbd_run_server(gint sock, GError **error)
 			g_error("unexpected error from curl_multi_wait in %s", G_STRFUNC);
 
 		if ((numfds > 0) && (waitfd.revents & CURL_WAIT_POLLIN)) { /* new event from the client */
-			struct RaucNBDTransfer *xfer = g_malloc0(sizeof(struct RaucNBDTransfer));
+			g_autofree struct RaucNBDTransfer *xfer = g_malloc0(sizeof(struct RaucNBDTransfer));
 			xfer->ctx = &ctx;
 
 			res = r_read_exact(sock, (guint8*)&xfer->request, sizeof(xfer->request), &ierror);
@@ -850,7 +850,7 @@ gboolean r_nbd_run_server(gint sock, GError **error)
 			xfer->reply.magic = GUINT32_TO_BE(NBD_REPLY_MAGIC);
 			memcpy(xfer->reply.handle, xfer->request.handle, sizeof(xfer->reply.handle));
 
-			start_request(&ctx, xfer);
+			start_request(&ctx, g_steal_pointer(&xfer));
 		}
 
 		mcode = curl_multi_perform(ctx.multi, &still_running);
