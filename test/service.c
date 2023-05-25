@@ -91,7 +91,6 @@ static void on_installer_changed(GDBusProxy *proxy, GVariant *changed,
 {
 	GQueue *args = data;
 	gchar *msg;
-	GVariant *var;
 	gint32 percentage, depth;
 	const gchar *message = NULL;
 
@@ -99,10 +98,10 @@ static void on_installer_changed(GDBusProxy *proxy, GVariant *changed,
 		g_message("Operation: %s", msg);
 	}
 	if (g_variant_lookup(changed, "Progress", "(isi)", &percentage, &message, &depth)) {
+		g_autoptr(GVariant) var = g_queue_pop_head(args);
 		gint32 cmp_percentage, cmp_depth;
 		const gchar *cmp_message;
 
-		var = g_queue_pop_head(args);
 		cmp_percentage = g_variant_get_int32(g_variant_get_child_value(var, 0));
 		cmp_message = g_variant_get_string(g_variant_get_child_value(var, 1), NULL);
 		cmp_depth = g_variant_get_int32(g_variant_get_child_value(var, 2));
@@ -158,7 +157,7 @@ static void assert_progress(GVariant *progress, gint32 percentage, const gchar *
 
 static void service_test_install(ServiceFixture *fixture, gconstpointer user_data, gboolean deprecated)
 {
-	GQueue *args = g_queue_new();
+	g_autoptr(GQueue) args = g_queue_new();
 	const gchar *operation = NULL, *last_error = NULL;
 	GVariant *progress = NULL;
 	const gchar *compatible = NULL;
