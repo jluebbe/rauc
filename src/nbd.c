@@ -550,11 +550,11 @@ static void start_configure(struct RaucNBDContext *ctx, struct RaucNBDTransfer *
 	CURLMcode mcode = 0;
 	g_autofree guint8 *data = g_malloc(xfer->request.len);
 	g_autoptr(GVariant) v = NULL;
-	GVariantDict dict;
 
 	/* only read from the client on the first try */
 	if (!ctx->url) {
 		g_autofree gchar *variant_contents = NULL;
+		g_auto(GVariantDict) dict = G_VARIANT_DICT_INIT(NULL);
 
 		res = r_read_exact(ctx->sock, (guint8*)data, xfer->request.len, NULL);
 		g_assert_true(res);
