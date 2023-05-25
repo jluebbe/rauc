@@ -86,6 +86,7 @@ void r_nbd_free_server(RaucNBDServer *nbd_srv)
 	g_free(nbd_srv->tls_key);
 	g_free(nbd_srv->tls_ca);
 	g_strfreev(nbd_srv->headers);
+	g_free(nbd_srv->effective_url);
 	g_free(nbd_srv);
 }
 
@@ -550,6 +551,8 @@ static void start_configure(struct RaucNBDContext *ctx, struct RaucNBDTransfer *
 
 	/* only read from the client on the first try */
 	if (!ctx->url) {
+		g_autofree gchar *variant_contents = NULL;
+
 		res = r_read_exact(ctx->sock, (guint8*)data, xfer->request.len, NULL);
 		g_assert_true(res);
 
@@ -558,7 +561,8 @@ static void start_configure(struct RaucNBDContext *ctx, struct RaucNBDTransfer *
 				FALSE,
 				NULL, NULL);
 		g_assert_nonnull(v);
-		g_message("received: %s", g_variant_print(v, TRUE));
+		variant_contents = g_variant_print(v, TRUE);
+		g_message("received: %s", variant_contents);
 
 		g_variant_dict_init(&dict, v);
 
@@ -948,6 +952,7 @@ static gboolean nbd_configure(RaucNBDServer *nbd_srv, GError **error)
 	g_autofree guint8 *reply_error = NULL;
 	g_autoptr(GVariant) v = NULL;
 	g_auto(GVariantDict) dict = G_VARIANT_DICT_INIT(NULL);
+	g_autofree gchar *variant_contents = NULL;
 
 	g_return_val_if_fail(nbd_srv != NULL, FALSE);
 	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
@@ -965,7 +970,8 @@ static gboolean nbd_configure(RaucNBDServer *nbd_srv, GError **error)
 	if (nbd_srv->headers)
 		g_variant_dict_insert(&dict, "headers", "^as", nbd_srv->headers);
 	v = g_variant_dict_end(&dict);
-	g_message("sending: %s", g_variant_print(v, TRUE));
+	variant_contents = g_variant_print(v, TRUE);
+	g_message("sending: %s", variant_contents);
 
 	request.magic = GUINT32_TO_BE(NBD_REQUEST_MAGIC);
 	request.type = GUINT32_TO_BE(RAUC_NBD_CMD_CONFIGURE);
