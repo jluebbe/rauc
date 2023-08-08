@@ -944,6 +944,17 @@ static gchar *info_formatter_shell(RaucManifest *manifest)
 			g_free(temp_string);
 		}
 
+		if (img->convert) {
+			temp_string = g_strjoinv(" ", (gchar**) img->convert);
+			formatter_shell_append_n(text, "RAUC_IMAGE_CONVERT", cnt, temp_string);
+			g_free(temp_string);
+		}
+		if (img->converted) {
+			temp_string = g_strjoinv(" ", (gchar**) img->converted);
+			formatter_shell_append_n(text, "RAUC_IMAGE_CONVERTED", cnt, temp_string);
+			g_free(temp_string);
+		}
+
 		cnt++;
 	}
 
@@ -1056,6 +1067,17 @@ static gchar *info_formatter_readable(RaucManifest *manifest)
 			g_free(temp_string);
 		}
 
+		if (img->convert) {
+			temp_string = g_strjoinv(" ", (gchar**) img->convert);
+			g_string_append_printf(text, "\tConvert:   %s\n", temp_string);
+			g_free(temp_string);
+		}
+		if (img->converted) {
+			temp_string = g_strjoinv(" ", (gchar**) img->converted);
+			g_string_append_printf(text, "\tConverted: %s\n", temp_string);
+			g_free(temp_string);
+		}
+
 		cnt++;
 	}
 
@@ -1142,6 +1164,10 @@ static gchar* info_formatter_json_base(RaucManifest *manifest, gboolean pretty)
 		json_builder_end_array(builder);
 		json_builder_set_member_name(builder, "adaptive");
 		strv_to_json_array(builder, img->adaptive);
+		json_builder_set_member_name(builder, "convert");
+		strv_to_json_array(builder, img->convert);
+		json_builder_set_member_name(builder, "converted");
+		strv_to_json_array(builder, img->converted);
 		json_builder_end_object(builder);
 		json_builder_end_object(builder);
 	}
