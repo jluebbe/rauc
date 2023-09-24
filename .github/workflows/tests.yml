@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     container:
       image: ghcr.io/rauc/rauc/rauc-ci:latest
       # allow mounting and devtmpfs in the container
@@ -13,6 +13,7 @@ jobs:
     - name: Inspect environment
       run: |
         whoami
+        ls -l /dev
         gcc --version
         apt-get update
         DEBIAN_FRONTEND='noninteractive' apt-get install -qy meson
