@@ -55,6 +55,25 @@ partition for U-Boot), :ref:`data partition(s) <sec-data-storage>` or similar.
 Since changing the partition layout is hard or even impossible to change in the
 field, make sure it meets both current and possible future requirements.
 
+.. note::
+
+  The ``/etc/fstab`` in your system's root FS (and RAUC's ``system.conf``)
+  should normally use stable paths to refer to partitions or devices.
+  Especially filesystem UUIDs (``UUID=<uuid>`` or ``/dev/disk/by-uuid/<uuid>``)
+  should *not* be used, as they are likely to be different after an update.
+
+  Depending on your system design and firmware, good stable paths can be:
+
+  * plain device names: ``/dev/sda``, ``/dev/mmcblk0p1``, ``/dev/nvme0n1p1``,
+    ``/dev/mapper/…`` (may change depending on enumeration ordering on some
+    systems)
+  * topology-based symlinks: ``/dev/disk/by-path/…`` (preferable if available)
+  * partition-table-UUID-based symlinks: ``/dev/disk/by-partuuid/…`` (breaks if
+    using the same disk image on e.g. both eMMC & SD card)
+
+  For more details on how to configure udev to generate stable paths, check the
+  FAQ entry :ref:`faq-udev-symlinks`.
+
 SD Card
 ~~~~~~~
 
@@ -242,10 +261,10 @@ target side is GLib (minimum version 2.45.8) as utility library and OpenSSL
    In order to let RAUC detect mounts correctly, GLib must be compiled
    with libmount support (``--enable-libmount``) and at least be 2.49.5.
 
-For network support (enabled with ``--enable-network``), additionally `libcurl`
+For network support (enabled with ``--Dnetwork=true``), additionally `libcurl`
 is required. This is only useful for the target service.
 
-For JSON-style support (enabled with ``--enable-json``), additionally
+For JSON-style support (enabled with ``-Djson=enabled``), additionally
 `libjson-glib` is required.
 
 Kernel Configuration
