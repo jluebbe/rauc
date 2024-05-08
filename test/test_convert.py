@@ -1,6 +1,7 @@
 import os
 import shutil
 
+from conftest import have_casync, have_desync
 from helper import run
 from conftest import have_casync
 from conftest import have_desync
