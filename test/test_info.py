@@ -2,6 +2,7 @@ import json
 import shutil
 import subprocess
 
+from conftest import have_json, have_streaming
 from helper import run
 from conftest import have_json
 from conftest import have_streaming
