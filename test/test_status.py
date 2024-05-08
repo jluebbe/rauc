@@ -58,7 +58,6 @@ def test_status_no_service_output_nvalid():
 
 
 def test_status(rauc_service, rauc_dbus_service):
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc status")
 
     assert exitcode == 0
