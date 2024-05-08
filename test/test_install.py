@@ -3,11 +3,6 @@ import shutil
 
 from conftest import have_casync, have_http, have_streaming, no_service, root
 from helper import run
-from conftest import root
-from conftest import no_service
-from conftest import have_casync
-from conftest import have_http
-from conftest import have_streaming
 
 
 def test_install_invalid_local_paths():
