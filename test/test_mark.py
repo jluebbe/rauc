@@ -54,7 +54,6 @@ def test_status_mark_good_any_bootslot():
 @no_service
 @have_grub
 def test_status_mark_good_non_bootslot():
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc -c test.conf" " --override-boot-slot=system0" " status mark-good bootloader.0")
 
     assert exitcode == 1
