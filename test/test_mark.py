@@ -69,7 +69,6 @@ def test_status_mark_good_dbus(rauc_service, rauc_dbus_service):
 
 @have_grub
 def test_status_mark_bad_dbus(rauc_service, rauc_dbus_service):
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc status mark-bad")
 
     assert exitcode == 0
