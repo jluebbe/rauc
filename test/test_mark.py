@@ -6,7 +6,6 @@ from conftest import have_grub
 @no_service
 @have_grub
 def test_status_mark_good_internally():
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc -c test.conf" " --override-boot-slot=system0" " status mark-good")
 
     assert exitcode == 0
