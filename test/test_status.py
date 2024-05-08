@@ -93,7 +93,6 @@ def test_status_json_pretty(rauc_service, rauc_dbus_service):
 
 
 def test_status_invalid(rauc_service, rauc_dbus_service):
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc status --detailed --output-format=invalid")
 
     assert exitcode == 1
