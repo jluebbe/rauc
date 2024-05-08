@@ -5,7 +5,8 @@ import signal
 import subprocess
 import time
 from functools import cache
-from helper import run
+
+import pytest
 from pydbus import SessionBus
 
 # Avoid fastcopy via sendfile() which seems to cause troubles with the 9pfs and
