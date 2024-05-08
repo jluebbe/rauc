@@ -81,7 +81,7 @@ def _have_casync():
         return False
 
 
-have_casync = pytest.mark.skipif(not have_casync(), reason="Have no casync")
+have_casync = pytest.mark.skipif(not _have_casync(), reason="Have no casync")
 
 
 def _have_desync():
