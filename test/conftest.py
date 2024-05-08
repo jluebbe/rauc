@@ -73,7 +73,7 @@ def _have_openssl():
 have_openssl = pytest.mark.skipif(not _have_openssl(), reason="Have no OPENSSL")
 
 
-def have_casync():
+def _have_casync():
     try:
         out, err, exitcode = run("casync --version")
         return exitcode == 0
