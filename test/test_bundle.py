@@ -1,4 +1,3 @@
-import shutil
 import os
 
 from helper import run
