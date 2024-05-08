@@ -2,6 +2,7 @@ import os
 import shutil
 
 from conftest import have_faketime
+from helper import run
 
 
 def prepare_signing_time_conf(tmp_path):
