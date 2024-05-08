@@ -234,6 +234,7 @@ def select_system_or_session_bus():
             print("Running locally")
 
     import os
+    import subprocess
 
     try:
         # Run the dbus-launch command and capture its output
