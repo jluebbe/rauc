@@ -4,7 +4,6 @@
 
 import logging
 import os
-import subprocess
 import shlex
 import logging
 
