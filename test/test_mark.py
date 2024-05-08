@@ -46,7 +46,6 @@ def test_status_mark_good_other():
 @no_service
 @have_grub
 def test_status_mark_good_any_bootslot():
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc -c test.conf" " --override-boot-slot=system0" " status mark-good rescue.0")
 
     assert exitcode == 0
