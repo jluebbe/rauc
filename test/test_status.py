@@ -72,7 +72,6 @@ def test_status_readable(rauc_service, rauc_dbus_service):
 
 
 def test_status_shell(rauc_service, rauc_dbus_service):
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc status --detailed --output-format=shell")
 
     assert exitcode == 0
