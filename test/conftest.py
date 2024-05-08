@@ -233,7 +233,6 @@ def select_system_or_session_bus():
         else:
             print("Running locally")
 
-    import subprocess
     import os
 
     try:
