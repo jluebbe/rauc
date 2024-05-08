@@ -1,8 +1,5 @@
 import os
 import re
-import pytest
-import time
-import subprocess
 import shutil
 import signal
 
