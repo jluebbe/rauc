@@ -30,7 +30,6 @@ def test_status_mark_active_internally():
 @no_service
 @have_grub
 def test_status_mark_good_booted():
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc -c test.conf" " --override-boot-slot=system0" " status mark-good booted")
 
     assert exitcode == 0
