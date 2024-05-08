@@ -9,6 +9,8 @@ from functools import cache
 import pytest
 from pydbus import SessionBus
 
+from helper import run
+
 # Avoid fastcopy via sendfile() which seems to cause troubles with the 9pfs and
 # the current kernel used in our qemu-test:
 #
