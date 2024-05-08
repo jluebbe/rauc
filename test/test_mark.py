@@ -14,7 +14,6 @@ def test_status_mark_good_internally():
 @no_service
 @have_grub
 def test_status_mark_bad_internally():
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc -c test.conf" " --override-boot-slot=system0" " status mark-bad")
 
     assert exitcode == 0
