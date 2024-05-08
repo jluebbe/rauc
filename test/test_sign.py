@@ -1,6 +1,5 @@
 import os
 
-from helper import run
 from conftest import have_faketime
 
 
