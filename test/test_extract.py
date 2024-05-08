@@ -2,6 +2,7 @@ import os
 import shutil
 
 from conftest import have_openssl
+from helper import run
 
 
 @have_openssl
