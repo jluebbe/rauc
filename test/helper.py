@@ -5,7 +5,7 @@
 import logging
 import os
 import shlex
-import logging
+import subprocess
 
 
 def logger_from_command(command):
