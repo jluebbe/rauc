@@ -4,8 +4,6 @@ import subprocess
 
 from conftest import have_json, have_streaming
 from helper import run
-from conftest import have_json
-from conftest import have_streaming
 
 
 def test_info_plain(tmp_path):
