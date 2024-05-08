@@ -2,6 +2,7 @@ import os
 import shutil
 
 from conftest import have_faketime
+from helper import run
 
 
 def test_resign(tmp_path):
