@@ -1,7 +1,5 @@
 from conftest import have_grub, no_service
 from helper import run
-from conftest import no_service
-from conftest import have_grub
 
 
 @no_service
