@@ -61,7 +61,6 @@ def test_status_mark_good_non_bootslot():
 
 @have_grub
 def test_status_mark_good_dbus(rauc_service, rauc_dbus_service):
-    # Test callling 'rauc status'
     out, err, exitcode = run("rauc status mark-good")
 
     assert exitcode == 0
