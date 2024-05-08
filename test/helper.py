@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2021 Enrico Jörns <e.joerns@pengutronix.de>, Pengutronix
 # SPDX-FileCopyrightText: 2021-2022 Bastian Krause <bst@pengutronix.de>, Pengutronix
 
+import logging
 import os
 import subprocess
 import shlex
