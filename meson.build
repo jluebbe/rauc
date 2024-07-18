@@ -1,7 +1,7 @@
 project(
   'rauc',
   'c',
-  version : '1.11.1',
+  version : '1.12',
   meson_version : '>=0.51',
   default_options: [
     'c_std=gnu11',
@@ -237,6 +237,8 @@ dbuswrapperdir = get_option('libexecdir')
 install_data('src/de.pengutronix.rauc.Installer.xml', install_dir : dbusinterfacesdir)
 
 install_man('rauc.1')
+
+rauc_build_root = meson.current_build_dir()
 
 subdir('data')
 subdir('docs')
