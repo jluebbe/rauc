@@ -35,6 +35,13 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         verbose: true
 
+    - uses: codecov/test-results-action@v1
+      if: ${{ !cancelled() }}
+      with:
+        files: ./build/meson-logs/testlog.junit.xml
+        token: ${{ secrets.CODECOV_TOKEN }}
+        verbose: true
+
     - name: Test without service and gpt
       run: |
         rm -rf build/
