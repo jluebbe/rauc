@@ -2639,6 +2639,9 @@ int main(int argc, char **argv)
 	G_GNUC_END_IGNORE_DEPRECATIONS
 #endif
 
+	int *foo = NULL;
+	g_print("%d\n", *foo);
+
 	fatal_mask = g_log_set_always_fatal(G_LOG_FATAL_MASK);
 	fatal_mask |= G_LOG_LEVEL_CRITICAL;
 	g_log_set_always_fatal(fatal_mask);
