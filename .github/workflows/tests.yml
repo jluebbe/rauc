@@ -42,6 +42,12 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         verbose: true
 
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: meson-junit-service
+        path: ./build/meson-logs/testlog.junit.xml
+
     - name: Test without service and gpt
       run: |
         rm -rf build/
