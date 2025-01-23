@@ -276,7 +276,7 @@ def test_bundle_convert_composefs(tmp_path, bundle):
     with extracted_bundle(tmp_path, bundle.output, remove=False) as extracted:
         run_tree(extracted)
 
-        image_path = extracted / "tree-a.tar.cfs" / "image"
+        image_path = extracted / "tree-a.tar.cfs" / "image.cfs"
         store_path = extracted / ".rauc-cfs-store"
 
         assert not (extracted / "tree-a.tar").exists()
