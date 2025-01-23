@@ -277,7 +277,7 @@ gboolean r_composefs_artifact_install(const RArtifact *artifact, const RaucImage
 	}
 
 	/* get required objects from image */
-	g_autofree const gchar *image_path = g_build_filename(artifact->path_tmp, "image", NULL);
+	g_autofree const gchar *image_path = g_build_filename(artifact->path_tmp, "image.cfs", NULL);
 	g_autoptr(GHashTable) image_objects = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
 
 	if (!composefs_objects_from_image(image_objects, image_path, &ierror)) {
