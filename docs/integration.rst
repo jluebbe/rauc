@@ -372,7 +372,7 @@ manages artifacts.
 
 ``composefs``
   Each artifact is a directory containing a `composefs
-  <https://github.com/containers/composefs>`_ metadata image.
+  <https://github.com/containers/composefs>`_ metadata image (``image.cfs``).
   In addition to the metadata image, the repository contains an object store in
   the ``<repo>/.rauc-cfs-store`` directory.
   An image should be a converted tar archive using ``convert=composefs``.
