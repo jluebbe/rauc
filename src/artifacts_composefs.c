@@ -173,7 +173,7 @@ gboolean r_composefs_artifact_repo_prune(RArtifactRepo *repo, GError **error)
 
 		g_hash_table_iter_init(&inner_iter, inner);
 		while (g_hash_table_iter_next(&inner_iter, NULL, (gpointer*)&artifact)) {
-			g_autofree const gchar *image_path = g_build_filename(artifact->path, "image", NULL);
+			g_autofree const gchar *image_path = g_build_filename(artifact->path, "image.cfs", NULL);
 			if (!composefs_objects_from_image(required_objects, image_path, &ierror)) {
 				g_propagate_error(error, ierror);
 				return FALSE;
