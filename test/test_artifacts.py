@@ -605,7 +605,7 @@ def test_composefs_install(rauc_dbus_service_with_system_composefs, tmp_path):
     artifact_path = repo.path / "artifact-1"
     run_tree(repo.path)
     assert artifact_path.is_symlink()
-    with mounted_composefs(tmp_path, artifact_path / "image", repo.path / ".rauc-cfs-store") as mount_path:
+    with mounted_composefs(tmp_path, artifact_path / "image.cfs", repo.path / ".rauc-cfs-store") as mount_path:
         run_tree(mount_path)
         with open(mount_path / "file-b", "rb") as f:
             assert f.read() == data_b
