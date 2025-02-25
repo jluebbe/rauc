@@ -105,6 +105,8 @@ G_GNUC_WARN_UNUSED_RESULT;
  */
 void install_args_free(RaucInstallArgs *args);
 
+G_DEFINE_AUTOPTR_CLEANUP_FUNC(RaucInstallArgs, install_args_free);
+
 /**
  * Start a new installer thread.
  *

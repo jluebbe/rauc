@@ -48,8 +48,6 @@ static gboolean service_install_cleanup(gpointer data)
 	g_dbus_interface_skeleton_flush(G_DBUS_INTERFACE_SKELETON(r_installer));
 	g_mutex_unlock(&args->status_mutex);
 
-	install_args_free(args);
-
 	return G_SOURCE_REMOVE;
 }
 
@@ -81,7 +79,7 @@ static gboolean r_on_handle_install_bundle(
 		const gchar *source,
 		GVariant *arg_args)
 {
-	RaucInstallArgs *args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	g_auto(GVariantDict) dict = G_VARIANT_DICT_INIT(arg_args);
 	g_autoptr(GVariant) dict_rest = NULL;
 	GVariantIter iter;
@@ -137,7 +135,6 @@ static gboolean r_on_handle_install_bundle(
 	args = NULL;
 
 out:
-	g_clear_pointer(&args, install_args_free);
 	if (res) {
 		r_installer_complete_install(interface, invocation);
 	} else {
@@ -496,7 +493,7 @@ static gboolean r_on_handle_get_primary(RInstaller *interface,
 
 static gboolean auto_install(const gchar *source)
 {
-	RaucInstallArgs *args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	gboolean res = TRUE;
 
 	if (!g_file_test(r_context()->config->autoinstall_path, G_FILE_TEST_EXISTS))
@@ -519,8 +516,6 @@ static gboolean auto_install(const gchar *source)
 	args = NULL;
 
 out:
-	g_clear_pointer(&args, g_free);
-
 	return res;
 }
 

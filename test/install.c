@@ -1062,7 +1062,6 @@ static gboolean install_cleanup(gpointer data)
 		gchar *msg = g_queue_pop_head(&args->status_messages);
 		g_free(msg);
 	}
-	install_args_free(args);
 
 	if (r_loop)
 		g_main_loop_quit(r_loop);
@@ -1089,7 +1088,6 @@ static void install_test_bundle(InstallFixture *fixture,
 	g_autofree gchar *slotfile = NULL;
 	g_autofree gchar *testfilepath = NULL;
 	g_autofree gchar *mountdir = NULL;
-	RaucInstallArgs *args;
 	g_autoptr(GError) ierror = NULL;
 	gboolean res;
 
@@ -1112,7 +1110,7 @@ static void install_test_bundle(InstallFixture *fixture,
 	g_assert_no_error(ierror);
 	g_assert_true(res);
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -1161,7 +1159,6 @@ static void install_test_bundle_twice(InstallFixture *fixture,
 static void install_test_bundle_thread(InstallFixture *fixture,
 		gconstpointer user_data)
 {
-	RaucInstallArgs *args = NULL;
 	g_autofree gchar *bundlepath = NULL;
 	g_autofree gchar *mountdir = NULL;
 
@@ -1180,7 +1177,7 @@ static void install_test_bundle_thread(InstallFixture *fixture,
 
 	g_assert_true(determine_slot_states(NULL));
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -1196,7 +1193,6 @@ static void install_test_bundle_hook_install_check(InstallFixture *fixture,
 {
 	g_autofree gchar *bundlepath = NULL;
 	g_autofree gchar *mountdir = NULL;
-	RaucInstallArgs *args;
 	g_autoptr(GError) ierror = NULL;
 
 	/* needs to run as root */
@@ -1214,7 +1210,7 @@ static void install_test_bundle_hook_install_check(InstallFixture *fixture,
 
 	g_assert_true(determine_slot_states(NULL));
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -1233,7 +1229,6 @@ static void install_test_bundle_hook_install(InstallFixture *fixture,
 	g_autofree gchar *slotfile = NULL;
 	g_autofree gchar *stamppath = NULL;
 	g_autofree gchar *hookfilepath = NULL;
-	RaucInstallArgs *args;
 	g_autoptr(GError) ierror = NULL;
 	gboolean res = FALSE;
 
@@ -1254,7 +1249,7 @@ static void install_test_bundle_hook_install(InstallFixture *fixture,
 	g_assert_no_error(ierror);
 	g_assert_true(res);
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -1290,7 +1285,6 @@ static void install_test_bundle_hook_post_install(InstallFixture *fixture,
 	g_autofree gchar *slotfile = NULL;
 	g_autofree gchar *testfilepath = NULL;
 	g_autofree gchar *stamppath = NULL;
-	RaucInstallArgs *args;
 
 	/* needs to run as root */
 	if (!test_running_as_root())
@@ -1307,7 +1301,7 @@ static void install_test_bundle_hook_post_install(InstallFixture *fixture,
 
 	g_assert_true(determine_slot_states(NULL));
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -1340,7 +1334,6 @@ static void install_test_already_mounted(InstallFixture *fixture,
 	g_autofree gchar *bundlepath = NULL;
 	g_autofree gchar *mountprefix = NULL;
 	g_autofree gchar *hookfilepath = NULL;
-	RaucInstallArgs *args;
 	g_autoptr(GError) ierror = NULL;
 	gboolean res;
 
@@ -1365,7 +1358,7 @@ static void install_test_already_mounted(InstallFixture *fixture,
 	g_assert_no_error(ierror);
 	g_assert_true(res);
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlepath);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;

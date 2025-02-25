@@ -231,7 +231,6 @@ static gboolean install_start(int argc, char **argv)
 	GBusType bus_type = (!g_strcmp0(g_getenv("DBUS_STARTER_BUS_TYPE"), "session"))
 	                    ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
 	RInstaller *installer = NULL;
-	RaucInstallArgs *args = NULL;
 	GError *error = NULL;
 	g_autofree gchar *bundlelocation = NULL;
 
@@ -255,7 +254,7 @@ static gboolean install_start(int argc, char **argv)
 		goto out;
 	g_debug("input bundle: %s", bundlelocation);
 
-	args = install_args_new();
+	g_autoptr(RaucInstallArgs) args = install_args_new();
 	args->name = g_steal_pointer(&bundlelocation);
 	args->notify = install_notify;
 	args->cleanup = install_cleanup;
@@ -366,7 +365,6 @@ out_loop:
 	if (installer)
 		g_signal_handlers_disconnect_by_data(installer, args);
 	g_clear_object(&installer);
-	install_args_free(args);
 
 out:
 	return TRUE;
