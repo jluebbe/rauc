@@ -13,8 +13,10 @@ typedef enum {
 	R_NBD_ERROR_CONFIGURATION,
 	R_NBD_ERROR_STARTUP,
 	R_NBD_ERROR_READ,
-	R_NBD_ERROR_UNAUTHORIZED,
-	R_NBD_ERROR_NOT_FOUND,
+	R_NBD_ERROR_NO_CONTENT, /* HTTP 204 */
+	R_NBD_ERROR_NOT_MODIFIED, /* HTTP 304 */
+	R_NBD_ERROR_UNAUTHORIZED, /* HTTP 401 */
+	R_NBD_ERROR_NOT_FOUND, /* HTTP 404 */
 	R_NBD_ERROR_SHUTDOWN,
 } RNBDError;
 
@@ -37,13 +39,14 @@ typedef struct {
 	gchar *tls_ca; /* local file */
 	gboolean tls_no_verify;
 	GStrv headers; /* array of strings such as 'Foo: bar' */
-	GStrv info_headers; /* array of strings such as 'Foo: bar' */
+	GPtrArray *info_headers; /* array of strings such as 'Foo: bar' */
 
 	/* discovered information */
 	guint64 data_size; /* bundle size */
 	gchar *effective_url; /* url after redirects */
 	guint64 current_time; /* date header from server */
 	guint64 modified_time; /* last-modified header from server */
+	gchar *etag; /* etag received from the server */
 } RaucNBDServer;
 
 RaucNBDDevice *r_nbd_new_device(void);

@@ -485,6 +485,45 @@ guint64 key_file_consume_binary_suffixed_string(GKeyFile *key_file,
 	return result << scale_shift;
 }
 
+gchar **key_file_consume_string_list(
+		GKeyFile *key_file,
+		const gchar *group_name,
+		const gchar *key,
+		const gchar **allowed,
+		GError **error)
+{
+	GError *ierror = NULL;
+	gsize length = 0;
+
+	g_auto(GStrv) result = g_key_file_get_string_list(key_file, group_name, key, &length, &ierror);
+	if (g_error_matches(ierror, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+		/* handle missing key the same as an empty list */
+		g_clear_error(&ierror);
+		return NULL;
+	} else if (ierror) {
+		g_propagate_error(error, ierror);
+		return NULL;
+	}
+
+	g_key_file_remove_key(key_file, group_name, key, NULL);
+
+	if (!length)
+		return NULL;
+
+	/* check against allow-list */
+	if (allowed) {
+		for (gsize i = 0; i < length; i++) {
+			if (!g_strv_contains(allowed, result[i])) {
+				g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE,
+						"Unsupported value '%s' for key '%s' in [%s]", result[i], key, group_name);
+				return NULL;
+			}
+		}
+	}
+
+	return g_steal_pointer(&result);
+}
+
 gchar * r_realpath(const gchar *path)
 {
 	gchar buf[PATH_MAX + 1];
@@ -1076,4 +1115,25 @@ gboolean r_semver_less_equal(const gchar *version_string_a, const gchar *version
 		return TRUE;
 	else
 		return (pre_fields_a[i] == NULL) && (pre_fields_b[i] != NULL);
+}
+
+gchar *r_format_duration(gint64 total_seconds)
+{
+	gint64 seconds = total_seconds % 60;
+	gint64 minutes = (total_seconds / 60) % 60;
+	gint64 hours = (total_seconds / 3600) % 24;
+	gint64 days = total_seconds / (3600 * 24);
+
+	GString *result = g_string_new(NULL);
+
+	if (days)
+		g_string_append_printf(result, "%"G_GINT64_FORMAT "d ", days);
+	if (hours)
+		g_string_append_printf(result, "%"G_GINT64_FORMAT "h ", hours);
+	if (minutes)
+		g_string_append_printf(result, "%"G_GINT64_FORMAT "m ", minutes);
+	if (seconds || !total_seconds)
+		g_string_append_printf(result, "%"G_GINT64_FORMAT "s", seconds);
+
+	return g_strchomp(g_string_free(result, FALSE));
 }

@@ -294,6 +294,27 @@ guint64 key_file_consume_binary_suffixed_string(GKeyFile *key_file,
 		GError **error)
 G_GNUC_WARN_UNUSED_RESULT;
 
+/**
+ * Get list of string arguments from key and remove key from key_file.
+ *
+ * Optionally filter
+ *
+ * @param key_file g GKeyFile
+ * @param group_name the group name
+ * @param key the key name
+ * @param allowed a list of allowed strings, or NULL
+ * @param error return location for a GError, or NULL
+ *
+ * @return a GStrv or NULL if the key was not found or an error occoured
+ */
+gchar **key_file_consume_string_list(
+		GKeyFile *key_file,
+		const gchar *group_name,
+		const gchar *key,
+		const gchar **allowed,
+		GError **error)
+G_GNUC_WARN_UNUSED_RESULT;
+
 gchar * r_realpath(const gchar *path)
 G_GNUC_WARN_UNUSED_RESULT;
 
@@ -449,3 +470,22 @@ gboolean r_semver_parse(const gchar *version_string, guint64 version_core[3], gc
  * @return TRUE if A<=B, FALSE otherwise
  */
 gboolean r_semver_less_equal(const gchar *version_string_a, const gchar *version_string_b, GError **error);
+
+/**
+ * Converts a duration given in seconds into a short human-readable string.
+ * The format is compact and space-separated, for example: "2h 15m 30s".
+ *
+ * Units are:
+ * - Days: "d"
+ * - Hours: "h"
+ * - Minutes: "m"
+ * - Seconds: "s"
+ *
+ * Units with zero values are omitted (except when the entire duration is zero,
+ * in which case "0s" is returned).
+ *
+ * @param total_seconds duration in seconds
+ *
+ * @return newly-allocated string representing the formatted duration
+ */
+gchar *r_format_duration(gint64 total_seconds);

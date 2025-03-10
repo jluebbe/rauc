@@ -9,7 +9,9 @@
 #include "config_file.h"
 #include "context.h"
 #include "install.h"
+#include "manifest.h"
 #include "mark.h"
+#include "nbd.h"
 #include "rauc-installer-generated.h"
 #include "service.h"
 #include "status_file.h"
@@ -17,6 +19,7 @@
 
 GMainLoop *service_loop = NULL;
 RInstaller *r_installer = NULL;
+RPoller *r_poller = NULL;
 guint r_bus_name_id = 0;
 
 static gboolean service_install_notify(gpointer data)
@@ -196,6 +199,9 @@ static gboolean r_on_handle_inspect_bundle(RInstaller *interface,
 		res = FALSE;
 		goto out;
 	}
+
+	g_assert(access_args.http_info_headers == NULL);
+	access_args.http_info_headers = assemble_info_headers(NULL);
 
 	res = check_bundle(arg_bundle, &bundle, CHECK_BUNDLE_DEFAULT, &access_args, &error);
 	if (!res) {
@@ -545,13 +551,13 @@ static void send_progress_callback(gint percentage,
 	g_dbus_interface_skeleton_flush(G_DBUS_INTERFACE_SKELETON(r_installer));
 }
 
+static gboolean on_handle_poll(RPoller *interface, GDBusMethodInvocation *invocation);
+
 static void r_on_bus_acquired(GDBusConnection *connection,
 		const gchar     *name,
 		gpointer user_data)
 {
 	GError *ierror = NULL;
-
-	r_installer = r_installer_skeleton_new();
 
 	g_signal_connect(r_installer, "handle-install",
 			G_CALLBACK(r_on_handle_install),
@@ -601,6 +607,21 @@ static void r_on_bus_acquired(GDBusConnection *connection,
 	r_installer_set_compatible(r_installer, r_context()->config->system_compatible);
 	r_installer_set_variant(r_installer, r_context()->config->system_variant);
 	r_installer_set_boot_slot(r_installer, r_context()->bootslot);
+
+	if (r_poller) {
+		g_signal_connect(r_poller, "handle-poll",
+				G_CALLBACK(on_handle_poll),
+				NULL);
+
+		if (!g_dbus_interface_skeleton_export(G_DBUS_INTERFACE_SKELETON(r_poller),
+				connection,
+				"/",
+				&ierror)) {
+			g_error("Failed to export interface: %s", ierror->message);
+			g_error_free(ierror);
+		}
+		g_message("poller skeleton set up");
+	}
 
 	return;
 }
@@ -653,14 +674,385 @@ static gboolean r_on_signal(gpointer user_data)
 	return G_SOURCE_REMOVE;
 }
 
+typedef struct {
+	GSource source;
+
+	gboolean installation_running;
+
+	guint64 attempt_count;
+	guint64 recent_error_count; /* since last success */
+	gint64 last_attempt_time; /* monotonic */
+	gint64 last_success_time; /* monotonic */
+	gchar *last_error_message;
+	gboolean update_available;
+	gchar *summary;
+	gchar *attempted_hash; /* manifest hash of the attempted update */
+
+	/* from the last successful attempt */
+	RaucManifest *manifest;
+	guint64 bundle_size;
+	gchar *bundle_effective_url;
+	guint64 bundle_modified_time;
+	gchar *bundle_etag;
+} RPollSource;
+
+typedef enum {
+	POLL_DELAY_NORMAL = 0,
+	POLL_DELAY_SHORT,
+	POLL_DELAY_NOW,
+	POLL_DELAY_INITIAL,
+} RPollDelay;
+
+static void poll_reschedule(RPollSource *poll_source, RPollDelay delay)
+{
+	gint64 delay_ms = 0;
+
+	switch (delay) {
+		case POLL_DELAY_NORMAL:
+			delay_ms = r_context()->config->poll_interval_ms * (poll_source->recent_error_count+1);
+			delay_ms = MIN(delay_ms, r_context()->config->poll_max_interval_ms);
+			break;
+		case POLL_DELAY_SHORT:
+			delay_ms = 15 * 1000;
+			break;
+		case POLL_DELAY_NOW:
+			delay_ms = 2 * 1000;
+			break;
+		case POLL_DELAY_INITIAL:
+			delay_ms = r_context()->config->poll_interval_ms / g_random_int_range(1, 10);
+			break;
+		default:
+			g_assert_not_reached();
+	}
+
+	//g_message("delay_ms=%"G_GINT64_FORMAT, delay_ms);
+	if (r_context()->mock.poll_speedup)
+		delay_ms = delay_ms / r_context()->mock.poll_speedup;
+	//g_message("speedup delay_ms=%"G_GINT64_FORMAT, delay_ms);
+
+	gint64 next = g_get_monotonic_time() + delay_ms * 1000;
+	r_poller_set_next_poll(r_poller, next);
+	//g_message("now=%"G_GINT64_FORMAT" next poll=%"G_GINT64_FORMAT, g_get_monotonic_time(), next);
+	g_source_set_ready_time(&poll_source->source, next);
+
+	g_autofree gchar *duration_str = r_format_duration(delay_ms / 1000);
+	g_message("scheduled next poll in: %s", duration_str);
+}
+
+static gboolean poll_fetch(RPollSource *poll_source, GError **error)
+{
+	GError *ierror = NULL;
+
+	g_return_val_if_fail(poll_source, FALSE);
+
+	/* fetch manifest */
+	g_auto(RaucBundleAccessArgs) access_args = {0};
+	access_args.http_info_headers = assemble_info_headers(NULL);
+	if (poll_source->bundle_etag) {
+		g_ptr_array_add(access_args.http_info_headers, g_strdup_printf("If-None-Match: %s", poll_source->bundle_etag));
+	}
+
+	g_autoptr(RaucBundle) bundle = NULL;
+	if (!check_bundle(r_context()->config->poll_source, &bundle, CHECK_BUNDLE_DEFAULT, &access_args, &ierror)) {
+		if (g_error_matches(ierror, R_NBD_ERROR, R_NBD_ERROR_NO_CONTENT)) {
+			g_message("polling: no bundle available");
+			/* TODO update summary? */
+			return TRUE; /* FIXME should this be an error? */
+		} else if (g_error_matches(ierror, R_NBD_ERROR, R_NBD_ERROR_NOT_MODIFIED)) {
+			g_message("polling: bundle not modified");
+			/* TODO update summary? */
+			return TRUE;
+		} else {
+			g_propagate_error(error, ierror);
+			return FALSE;
+		}
+	}
+
+	if (!bundle->manifest) {
+		g_message("polling failed: no manifest found");
+		return FALSE;
+	}
+
+	g_clear_pointer(&poll_source->manifest, free_manifest);
+	poll_source->manifest = g_steal_pointer(&bundle->manifest);
+
+	g_assert(bundle->nbd_srv);
+	poll_source->bundle_size = bundle->nbd_srv->data_size;
+	poll_source->bundle_modified_time = bundle->nbd_srv->modified_time;
+	r_replace_strdup(&poll_source->bundle_effective_url, bundle->nbd_srv->effective_url);
+	r_replace_strdup(&poll_source->bundle_etag, bundle->nbd_srv->etag);
+
+	return TRUE;
+}
+
+static gboolean poll_check_available(RPollSource *poll_source, GError **error)
+{
+	/* decide if we need to install (using system version?) */
+	g_message("polling: system-version=%s bundle-version=%s",
+			r_context()->system_version, poll_source->manifest->update_version);
+
+	/* TODO check install_if */
+
+	if (g_strcmp0(r_context()->system_version, poll_source->manifest->update_version) != 0) {
+		r_replace_strdup(&poll_source->summary, "update available: different system version");
+		return TRUE;
+	}
+
+	r_replace_strdup(&poll_source->summary, "no update available");
+	return FALSE;
+}
+
+static gboolean poll_install_cleanup(gpointer data)
+{
+	RaucInstallArgs *args = data;
+	RPollSource *poll_source = args->data;
+
+	poll_source->installation_running = FALSE;
+
+	g_mutex_lock(&args->status_mutex);
+	if (args->status_result == 0) {
+		g_message("installing `%s` succeeded", args->name);
+	} else {
+		g_message("installing `%s` failed: %d", args->name, args->status_result);
+	}
+	/* TODO expose error? */
+	r_installer_emit_completed(r_installer, args->status_result);
+	r_installer_set_operation(r_installer, "idle");
+	g_dbus_interface_skeleton_flush(G_DBUS_INTERFACE_SKELETON(r_installer));
+	g_mutex_unlock(&args->status_mutex);
+
+	install_args_free(args);
+
+	poll_reschedule(poll_source, POLL_DELAY_SHORT);
+	g_dbus_interface_skeleton_flush(G_DBUS_INTERFACE_SKELETON(r_poller));
+
+	return G_SOURCE_REMOVE;
+}
+
+static gboolean poll_install(RPollSource *poll_source, GError **error)
+{
+	RaucInstallArgs *args = install_args_new();
+	g_autofree gchar *message = NULL;
+	gboolean res;
+
+	g_return_val_if_fail(poll_source, FALSE);
+	g_return_val_if_fail(poll_source->manifest, FALSE);
+	g_return_val_if_fail(poll_source->manifest->hash, FALSE);
+	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
+
+	args->name = g_strdup(r_context()->config->poll_source);
+	args->cleanup = poll_install_cleanup;
+	args->data = poll_source;
+	/* lock bundle via manifest hash */
+	args->require_manifest_hash = g_strdup(poll_source->manifest->hash);
+
+	r_installer_set_operation(r_installer, "installing");
+	res = install_run(args);
+	if (!res) {
+		message = g_strdup("Failed to launch install thread");
+		args->status_result = 1;
+		goto out;
+	}
+	args = NULL;
+	poll_source->installation_running = TRUE;
+
+out:
+	g_clear_pointer(&args, install_args_free);
+	if (res) {
+	} else {
+		r_installer_set_operation(r_installer, "idle");
+	}
+
+	return TRUE;
+
+	/* TODO trigger installation, which may reboot at the end */
+}
+
+static gboolean poll_step(RPollSource *poll_source, GError **error)
+{
+	GError *ierror = NULL;
+
+	if (!poll_fetch(poll_source, &ierror)) {
+		g_propagate_error(error, ierror);
+		return FALSE;
+	}
+	/* TODO store cache info */
+
+	g_clear_pointer(&poll_source->summary, g_free);
+	poll_source->update_available = FALSE;
+	gboolean available = poll_check_available(poll_source, &ierror);
+	if (ierror) {
+		g_propagate_prefixed_error(error, ierror, "availability check failed: ");
+		return FALSE;
+	} else if (!available) {
+		return TRUE;
+	} else {
+		poll_source->update_available = TRUE;
+	}
+
+	/* retry if manifest hash has changed */
+	if (g_strcmp0(poll_source->manifest->hash, poll_source->attempted_hash) != 0) {
+		r_replace_strdup(&poll_source->attempted_hash, poll_source->manifest->hash);
+		if (!poll_install(poll_source, &ierror)) {
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+static void poll_update_status(RPollSource *poll_source)
+{
+	g_auto(GVariantBuilder) builder = G_VARIANT_BUILDER_INIT(G_VARIANT_TYPE("a{sv}"));
+
+	g_variant_builder_add(&builder, "{sv}", "attempt-count", g_variant_new_uint64(poll_source->attempt_count));
+	g_variant_builder_add(&builder, "{sv}", "recent-error-count", g_variant_new_uint64(poll_source->recent_error_count));
+
+	g_variant_builder_add(&builder, "{sv}", "last-attempt-time", g_variant_new_uint64(poll_source->last_attempt_time));
+	g_variant_builder_add(&builder, "{sv}", "last-success-time", g_variant_new_uint64(poll_source->last_success_time));
+	if (poll_source->last_error_message)
+		g_variant_builder_add(&builder, "{sv}", "last-error-message", g_variant_new_string(poll_source->last_error_message));
+	g_variant_builder_add(&builder, "{sv}", "update-available", g_variant_new_boolean(poll_source->update_available));
+	if (poll_source->summary)
+		g_variant_builder_add(&builder, "{sv}", "summary", g_variant_new_string(poll_source->summary));
+	if (poll_source->attempted_hash)
+		g_variant_builder_add(&builder, "{sv}", "attempted-hash", g_variant_new_string(poll_source->attempted_hash));
+
+	if (poll_source->manifest) {
+		/* manifest dict */
+		g_variant_builder_add(&builder, "{sv}", "manifest", r_manifest_to_dict(poll_source->manifest));
+
+		/* bundle dict */
+		g_variant_builder_open(&builder, G_VARIANT_TYPE("{sv}"));
+		g_variant_builder_add(&builder, "s", "bundle");
+		g_variant_builder_open(&builder, G_VARIANT_TYPE("v"));
+		g_variant_builder_open(&builder, G_VARIANT_TYPE("a{sv}"));
+		if (poll_source->bundle_size)
+			g_variant_builder_add(&builder, "{sv}", "size", g_variant_new_uint64(poll_source->bundle_size));
+		if (poll_source->bundle_effective_url)
+			g_variant_builder_add(&builder, "{sv}", "effective-url", g_variant_new_string(poll_source->bundle_effective_url));
+		if (poll_source->bundle_modified_time)
+			g_variant_builder_add(&builder, "{sv}", "modified-time", g_variant_new_uint64(poll_source->bundle_modified_time));
+		if (poll_source->bundle_etag)
+			g_variant_builder_add(&builder, "{sv}", "etag", g_variant_new_string(poll_source->bundle_etag));
+		g_variant_builder_close(&builder); /* inner a{sv} */
+		g_variant_builder_close(&builder); /* inner v */
+		g_variant_builder_close(&builder); /* outer {sv} */
+	}
+
+	r_poller_set_status(r_poller, g_variant_builder_end(&builder));
+}
+
+static gboolean on_handle_poll(RPoller *interface, GDBusMethodInvocation *invocation)
+{
+	RPollSource *poll_source = (RPollSource *)g_object_get_data(G_OBJECT(interface), "r-poll");
+	g_assert(poll_source);
+
+	poll_reschedule(poll_source, POLL_DELAY_NOW);
+	g_dbus_interface_skeleton_flush(G_DBUS_INTERFACE_SKELETON(r_poller));
+	r_poller_complete_poll(interface, invocation);
+
+	return TRUE;
+}
+
+static gboolean poll_source_dispatch(GSource *source, GSourceFunc _callback, gpointer _user_data)
+{
+	RPollSource *poll_source = (RPollSource *)source;
+	g_autoptr(GError) ierror = NULL;
+
+	/* check busy state */
+	if (r_context_get_busy()) {
+		g_debug("context busy, will try again later");
+		poll_reschedule(poll_source, POLL_DELAY_SHORT);
+		return G_SOURCE_CONTINUE;
+	}
+
+	/* check inhibit */
+	for (gchar **p = r_context()->config->poll_inhibit_files; p && *p; p++) {
+		if (g_file_test(*p, G_FILE_TEST_EXISTS)) {
+			g_debug("inhibited by %s", *p);
+			poll_reschedule(poll_source, POLL_DELAY_SHORT);
+			return G_SOURCE_CONTINUE;
+		}
+	}
+
+	/* poll once */
+	poll_source->last_attempt_time = g_get_monotonic_time();
+	poll_source->attempt_count += 1;
+	/* TODO add some headers? recent errors? */
+	if (!poll_step(poll_source, &ierror)) {
+		g_message("polling failed: %s", ierror->message);
+		r_replace_strdup(&poll_source->last_error_message, g_strdup(ierror->message));
+		poll_source->recent_error_count += 1;
+	} else {
+		g_clear_pointer(&poll_source->last_error_message, g_free);
+		poll_source->last_success_time = g_get_monotonic_time();
+		poll_source->recent_error_count = 0;
+	}
+
+	poll_update_status(poll_source);
+
+	if (poll_source->installation_running) {
+		/* wait until the installation has completed */
+		g_source_set_ready_time(&poll_source->source, -1);
+	} else {
+		/* schedule next poll */
+		poll_reschedule(poll_source, POLL_DELAY_NORMAL);
+	}
+
+	return G_SOURCE_CONTINUE;
+}
+
+static void poll_source_finalize(GSource *source)
+{
+	RPollSource *poll_source = (RPollSource *)source;
+
+	g_clear_pointer(&poll_source->last_error_message, g_free);
+	g_clear_pointer(&poll_source->manifest, free_manifest);
+	g_clear_pointer(&poll_source->summary, g_free);
+	g_clear_pointer(&poll_source->attempted_hash, g_free);
+	g_clear_pointer(&poll_source->bundle_effective_url, g_free);
+	g_clear_pointer(&poll_source->bundle_etag, g_free);
+}
+
+static GSourceFuncs source_funcs = {
+	.dispatch = poll_source_dispatch,
+	.finalize = poll_source_finalize,
+};
+
+static RPollSource *poll_setup(void)
+{
+	g_assert(r_context()->config->poll_source);
+
+	GSource *source = g_source_new(&source_funcs, sizeof(RPollSource));
+	RPollSource *poll_source = (RPollSource *)source;
+
+	poll_update_status(poll_source);
+	poll_reschedule(poll_source, POLL_DELAY_INITIAL);
+	g_source_attach(source, NULL);
+
+	g_message("Setup done");
+
+	return poll_source;
+}
+
 gboolean r_service_run(void)
 {
 	gboolean service_return = TRUE;
 	GBusType bus_type = (!g_strcmp0(g_getenv("DBUS_STARTER_BUS_TYPE"), "session"))
 	                    ? G_BUS_TYPE_SESSION : G_BUS_TYPE_SYSTEM;
+	RPollSource *poll_source = NULL;
 
 	service_loop = g_main_loop_new(NULL, FALSE);
 	g_unix_signal_add(SIGTERM, r_on_signal, NULL);
+
+	r_installer = r_installer_skeleton_new();
+
+	if (r_context()->config->poll_source) {
+		r_poller = r_poller_skeleton_new();
+		poll_source = poll_setup();
+		g_object_set_data(G_OBJECT(r_poller), "r-poll", poll_source);
+	}
 
 	r_bus_name_id = g_bus_own_name(bus_type,
 			"de.pengutronix.rauc",
@@ -679,6 +1071,9 @@ gboolean r_service_run(void)
 	service_loop = NULL;
 
 	g_clear_pointer(&r_installer, g_object_unref);
+	if (poll_source)
+		g_source_unref(&poll_source->source);
+	g_clear_pointer(&r_poller, g_object_unref);
 
 	return service_return;
 }

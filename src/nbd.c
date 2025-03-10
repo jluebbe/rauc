@@ -86,8 +86,9 @@ void r_nbd_free_server(RaucNBDServer *nbd_srv)
 	g_free(nbd_srv->tls_key);
 	g_free(nbd_srv->tls_ca);
 	g_strfreev(nbd_srv->headers);
-	g_strfreev(nbd_srv->info_headers);
+	g_clear_pointer(&nbd_srv->info_headers, g_ptr_array_unref);
 	g_free(nbd_srv->effective_url);
+	g_free(nbd_srv->etag);
 	g_free(nbd_srv);
 }
 
@@ -318,7 +319,16 @@ struct RaucNBDTransfer {
 	guint64 content_size;
 	guint64 current_time; /* date header from server */
 	guint64 modified_time; /* last-modified header from server */
+	gchar *etag;
 };
+
+static void free_transfer(struct RaucNBDTransfer *xfer)
+{
+	g_clear_pointer(&xfer->buffer, g_free);
+	g_clear_pointer(&xfer->etag, g_free);
+
+	g_free(xfer);
+}
 
 static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
@@ -340,19 +350,18 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata)
 {
 	struct RaucNBDTransfer *xfer = userdata;
-	g_autofree gchar *header = NULL;
-	g_auto(GStrv) h_pair = NULL;
 
 	g_assert_cmpint(size, ==, 1); /* according to the docs, size is always 1 */
 
-	/* make sure we have a 0-terminated lowercase string */
-	header = g_strchomp(g_ascii_strdown(buffer, nitems));
+	/* make sure we have our own 0-terminated string */
+	g_autofree gchar *header = g_strchomp(g_strndup(buffer, nitems));
 
-	h_pair = g_strsplit(header, ": ", 2);
+	g_auto(GStrv) h_pair = g_strsplit(header, ": ", 2);
 	if (g_strv_length(h_pair) < 2)
 		return nitems;
 
-	if (g_str_equal(h_pair[0], "content-range")) {
+	g_autofree gchar *h_name = g_ascii_strdown(h_pair[0], -1);
+	if (g_str_equal(h_name, "content-range")) {
 		g_auto(GStrv) h_elements = NULL;
 		g_auto(GStrv) h_range = NULL;
 		gchar *endptr = NULL;
@@ -385,18 +394,22 @@ static size_t header_cb(char *buffer, size_t size, size_t nitems, void *userdata
 		xfer->content_size = range_size;
 
 		g_message("nbd server received total size %"G_GUINT64_FORMAT, range_size);
-	} else if (g_str_equal(h_pair[0], "date")) {
+	} else if (g_str_equal(h_name, "date")) {
 		time_t date = curl_getdate(h_pair[1], NULL);
 		if (date >= 0) {
 			xfer->current_time = date;
 			g_message("nbd server received HTTP server date %"G_GUINT64_FORMAT, xfer->current_time);
 		}
-	} else if (g_str_equal(h_pair[0], "last-modified")) {
+	} else if (g_str_equal(h_name, "last-modified")) {
 		time_t date = curl_getdate(h_pair[1], NULL);
 		if (date >= 0) {
 			xfer->modified_time = date;
 			g_message("nbd server received HTTP file date %"G_GUINT64_FORMAT, xfer->modified_time);
 		}
+	} else if (g_str_equal(h_name, "etag")) {
+		r_replace_strdup(&xfer->etag, h_pair[1]);
+		g_autofree gchar *escaped = g_strescape(h_pair[1], NULL);
+		g_message("nbd server received HTTP ETag: \"%s\"", escaped);
 	}
 
 	return nitems;
@@ -636,7 +649,7 @@ static void start_request(struct RaucNBDContext *ctx, struct RaucNBDTransfer *xf
 		case NBD_CMD_DISC: {
 			g_message("nbd server received disconnect request");
 			ctx->done = TRUE;
-			g_free(xfer); /* not queued via curl_multi_add_handle */
+			free_transfer(xfer); /* not queued via curl_multi_add_handle */
 			break;
 		}
 		case RAUC_NBD_CMD_CONFIGURE: {
@@ -724,6 +737,12 @@ static gboolean finish_configure(struct RaucNBDContext *ctx, struct RaucNBDTrans
 			case 200:
 				error = g_strdup_printf("range requests not supported by server");
 				break;
+			case 204:
+				error = g_strdup_printf("no content");
+				break;
+			case 304:
+				error = g_strdup_printf("not modified");
+				break;
 			default:
 				error = g_strdup_printf("unexpected HTTP error code %ld", response_code);
 		}
@@ -780,6 +799,8 @@ reply:
 		g_variant_dict_insert(&dict, "current-time", "t", xfer->current_time);
 	if (xfer->modified_time)
 		g_variant_dict_insert(&dict, "modified-time", "t", xfer->modified_time);
+	if (xfer->etag)
+		g_variant_dict_insert(&dict, "etag", "s", xfer->etag);
 
 	v = g_variant_dict_end(&dict);
 	reply_size = g_variant_get_size(v);
@@ -944,12 +965,12 @@ gboolean r_nbd_run_server(gint sock, GError **error)
 						error,
 						R_NBD_ERROR, R_NBD_ERROR_SHUTDOWN,
 						"finish_request failed, shutting down");
-				g_free(xfer);
+				free_transfer(xfer);
 				goto out;
 			}
 
 			if (xfer->done) {
-				g_free(xfer);
+				free_transfer(xfer);
 			} else {
 				/* retry */
 				sleep(1);
@@ -1025,7 +1046,8 @@ static gboolean nbd_configure(RaucNBDServer *nbd_srv, GError **error)
 	if (nbd_srv->headers)
 		g_variant_dict_insert(&dict, "headers", "^as", nbd_srv->headers);
 	if (nbd_srv->info_headers)
-		g_variant_dict_insert(&dict, "info-headers", "^as", nbd_srv->info_headers);
+		g_variant_dict_insert(&dict, "info-headers", "@as",
+				g_variant_new_strv((const gchar **)nbd_srv->info_headers->pdata, nbd_srv->info_headers->len));
 	v = g_variant_dict_end(&dict);
 	{
 		g_autofree gchar *tmp = g_variant_print(v, TRUE);
@@ -1073,7 +1095,17 @@ static gboolean nbd_configure(RaucNBDServer *nbd_srv, GError **error)
 		guint32 http_code = 0;
 		g_variant_dict_lookup(&dict, "error-http-code", "u", &http_code);
 		g_message("received http error %"G_GUINT32_FORMAT, http_code);
-		if (http_code == 401) {
+		if (http_code == 204) {
+			g_set_error(
+					error,
+					R_NBD_ERROR, R_NBD_ERROR_NO_CONTENT,
+					"no content: %s", reply_error);
+		} else if (http_code == 304) {
+			g_set_error(
+					error,
+					R_NBD_ERROR, R_NBD_ERROR_NOT_MODIFIED,
+					"not modified: %s", reply_error);
+		} else if (http_code == 401) {
 			g_set_error(
 					error,
 					R_NBD_ERROR, R_NBD_ERROR_UNAUTHORIZED,
@@ -1114,6 +1146,7 @@ static gboolean nbd_configure(RaucNBDServer *nbd_srv, GError **error)
 		g_autofree gchar *formatted_date = g_date_time_format(datetime, "%Y-%m-%d %H:%M:%S");
 		g_message("received HTTP server info: modified time %s (%"G_GUINT64_FORMAT ")", formatted_date, nbd_srv->modified_time);
 	}
+	g_variant_dict_lookup(&dict, "etag", "s", &nbd_srv->etag);
 
 	return TRUE;
 }
