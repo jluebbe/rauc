@@ -369,6 +369,34 @@ For more information about using the streaming support of RAUC, refer to
   * ``transaction-id``: Enables sending the *transaction UUID* as ``RAUC-Transaction-ID`` header field.
   * ``uptime``: Enables sending the system's current uptime as ``RAUC-Uptime`` header field.
 
+.. _poll-section:
+
+``[poll]`` Section
+~~~~~~~~~~~~~~~~~~
+
+``source`` (required if the section exists)
+  The URL from which to fetch the update manifest. This must be an HTTP(S) URL.
+
+``interval-sec`` (optional, default is one day/86400 seconds)
+  The interval, in seconds, between polling attempts. Default is one day (86400 seconds).
+
+``max-interval-sec`` (optional, default is four times ``interval-sec``)
+  The maximum interval, in seconds, between polling attempts.
+  This should be larger than interval-sec.
+
+``inhibit-files`` (optional)
+  A list of files that, if present, inhibit polling.
+
+``install-if`` (optional)
+  Conditions under which to install an update.
+
+  Supported values are:
+
+  * ``version-differs``
+
+``reboot-cmd`` (optional)
+  Command to execute for rebooting the system after an update.
+
 ``[encryption]`` Section
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1743,8 +1771,10 @@ IN *args* ``a{sv}``:
     *args.tls-no-verify* variant ``b`` <true/false>:
         Ignore verification errors for the server certificate
 
+.. _gdbus-method-de-pengutronix-rauc-Installer.InspectBundle.info:
+
 OUT *info* ``a{sv}``:
-    Bundle info
+    Information from the bundle's manifest.
 
     *info.manifest-hash* variant ``s`` <hash>:
         A SHA256 hash sum over the manifest content
@@ -1995,6 +2025,92 @@ This can either be the slot name (e.g. ``rauc.slot=rootfs.0``) or the root devic
 path (e.g. ``root=PARTUUID=0815``). If the ``root=`` kernel command line option is
 used, the symlink is resolved to the block device (e.g. ``/dev/mmcblk0p1``).
 
+.. _gdbus-interface-de-pengutronix-rauc-Poller:
+
+Poller Interface
+~~~~~~~~~~~~~~~~
+
+.. literalinclude:: ../src/de.pengutronix.rauc.Poller.xml
+   :caption: ``src/de.pengutronix.rauc.Poller.xml``
+   :language: xml
+   :lineno-match:
+   :end-at: <interface
+
+.. _gdbus-method-de-pengutronix-rauc-Poller.Poll:
+
+Poll() Method
+^^^^^^^^^^^^^
+
+.. literalinclude:: ../src/de.pengutronix.rauc.Poller.xml
+   :language: xml
+   :lineno-match:
+   :start-at: <method name="Poll"/>
+   :end-at: <method
+
+Triggers a poll of the configured source.
+
+This method has no parameters and returns nothing.
+
+.. _gdbus-property-de-pengutronix-rauc-Poller.Status:
+
+"Status" Property
+^^^^^^^^^^^^^^^^^^^
+
+.. literalinclude:: ../src/de.pengutronix.rauc.Poller.xml
+   :language: xml
+   :lineno-match:
+   :start-at: <property name="Status"
+   :end-at: <property
+
+The "Status" property consist of a ``a{sv}`` dictionary with the following contents:
+
+*attempt-count* variant ``t`` <count>:
+    The number of polling attempts
+
+*recent-error-count* variant ``t`` <count>:
+    The number of failed polling attempts since the last success (or service startup)
+
+*last-attempt-time* variant ``t`` <FIXME>:
+    The time of the last polling attempt (in FIXME)
+
+*last-success-time* variant ``t`` <FIXME>:
+    The time of the last successful poll (in FIXME)
+
+*last-error-message* variant ``s`` <message>:
+    The failure cause, if the most last attempt failed
+
+*update-available* variant ``b`` <true/false>:
+    True if the bundle is considered a valid update according to the configuration
+
+*summary* variant ``b`` <true/false>:
+    Summary of whether the bundle is a valid update.
+
+*attempted-hash* variant ``s`` <hash>:
+    The manifest hash of the most recent installation attempt
+
+*manifest* variant ``a{sv}`` <manifest-dict>:
+    The contents of the bundle's manifest, :ref:`as documented in the
+    InspectBundle() method
+    <gdbus-method-de-pengutronix-rauc-Installer.InspectBundle.info>`
+
+    Check the ``recent-error-count`` and ``last-success-time`` to know if this
+    may be outdated.
+
+*bundle* variant ``a{sv}`` <bundle-dict>:
+    Details of the polled bundle
+
+    *bundle.size* variant ``t`` <size>:
+        The size of the bundle file in bytes
+
+    *bundle.effective-url* variant ``s`` <URL>:
+        The actual URL used after following any potential redirects
+
+    *bundle.modified-time* variant ``t`` <unix time in seconds>:
+        The modification time of the bundle as reported by the server via the
+        ``Last-Modified`` HTTP header in Unix time
+
+    *bundle.etag* variant ``s`` <URL>:
+        The ``ETag`` HTTP header value as reported by the server
 
 RAUC's Basic Update Procedure
 -----------------------------
