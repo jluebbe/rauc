@@ -626,7 +626,7 @@ class System:
         return events
 
     @contextmanager
-    def running_service(self, bootslot, *, poll_speedup=None):
+    def running_service(self, bootslot, *, poll_speedup=None, extra_env=None):
         if not have_service():
             # TODO avoid unnescesary setup by moving using a pytest mark for all service/noservice cases
             pytest.skip("No service")
@@ -638,6 +638,8 @@ class System:
         env["RAUC_PYTEST_TMP"] = str(self.tmp_path)
         if poll_speedup:
             env["RAUC_TEST_POLL_SPEEDUP"] = f"{poll_speedup}"
+        if extra_env:
+            env.update(extra_env)
 
         command = ""
         if "SERVICE_BACKTRACE" in env:
