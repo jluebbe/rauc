@@ -563,7 +563,7 @@ GSource *r_poll_setup(void)
 	r_poller = r_poller_skeleton_new();
 
 	GSource *source = g_source_new(&source_funcs, sizeof(RPollSource));
-	RPollSource *poll_source = (RPollSource *)source;
+	RPollSource *poll_source = (void *)source;
 	g_object_set_data(G_OBJECT(r_poller), "r-poll", poll_source);
 
 	poll_update_status(poll_source);
