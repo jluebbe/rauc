@@ -516,7 +516,7 @@ static void poll_source_finalize(GSource *source)
 
 	g_clear_pointer(&r_poller, g_object_unref);
 
-	RPollSource *poll_source = (RPollSource *)source;
+	RPollSource *poll_source = (void *)source;
 	g_clear_pointer(&poll_source->last_error_message, g_free);
 	g_clear_pointer(&poll_source->manifest, free_manifest);
 	g_clear_pointer(&poll_source->summary, g_free);
