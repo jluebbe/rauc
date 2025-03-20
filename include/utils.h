@@ -309,7 +309,7 @@ G_GNUC_WARN_UNUSED_RESULT;
  * @param allowed a list of allowed strings, or NULL
  * @param error return location for a GError, or NULL
  *
- * @return a GStrv or NULL if the key was not found or an error occoured
+ * @return a GStrv or NULL if the key was not found or an error occurred
  */
 gchar **key_file_consume_string_list(
 		GKeyFile *key_file,
