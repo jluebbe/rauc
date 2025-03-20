@@ -452,7 +452,7 @@ static gboolean poll_source_dispatch(GSource *source, GSourceFunc _callback, gpo
 {
 	g_return_val_if_fail(source, G_SOURCE_REMOVE);
 
-	RPollSource *poll_source = (RPollSource *)source;
+	RPollSource *poll_source = (void *)source;
 	g_autoptr(GError) ierror = NULL;
 
 	/* check busy state */
