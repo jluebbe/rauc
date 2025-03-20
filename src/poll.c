@@ -225,7 +225,7 @@ static gboolean poll_check_reboot_criteria(const RaucInstallArgs *install_args)
 		}
 	} else {
 		if (install_args->status_result != 0) {
-			g_message("polling: installation failed, supressing reboot");
+			g_message("polling: installation failed, suppressing reboot");
 			return FALSE;
 		}
 	}
