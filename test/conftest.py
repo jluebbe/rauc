@@ -730,8 +730,8 @@ class HTTPServer:
         try:
             self.server.wait(timeout=10)
         except subprocess.TimeoutExpired:
-            self.service.kill()
-            self.service.wait()
+            self.server.kill()
+            self.server.wait()
 
     def setup(self, *, file_path):
         resp = requests.post(
