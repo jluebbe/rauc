@@ -488,7 +488,7 @@ static gboolean poll_source_dispatch(GSource *source, GSourceFunc _callback, gpo
 	/* TODO add some headers? recent errors? */
 	if (!poll_step(poll_source, &ierror)) {
 		g_message("polling failed: %s", ierror->message);
-		r_replace_strdup(&poll_source->last_error_message, g_strdup(ierror->message));
+		r_replace_strdup(&poll_source->last_error_message, ierror->message);
 		poll_source->recent_error_count += 1;
 	} else {
 		g_clear_pointer(&poll_source->last_error_message, g_free);
