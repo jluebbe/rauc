@@ -726,7 +726,7 @@ class HTTPServer:
             return
         assert self.server is not None
 
-        self.service.terminate()
+        self.server.terminate()
         try:
             self.service.wait(timeout=10)
         except subprocess.TimeoutExpired:
