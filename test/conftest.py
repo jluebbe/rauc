@@ -728,7 +728,7 @@ class HTTPServer:
 
         self.server.terminate()
         try:
-            self.service.wait(timeout=10)
+            self.server.wait(timeout=10)
         except subprocess.TimeoutExpired:
             self.service.kill()
             self.service.wait()
