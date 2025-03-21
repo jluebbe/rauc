@@ -162,6 +162,9 @@ needs_emmc = pytest.mark.skipif("RAUC_TEST_EMMC" not in os.environ, reason="Miss
 needs_composefs = pytest.mark.skipif(not string_in_config_h("ENABLE_COMPOSEFS 1"), reason="Missing composefs support")
 
 
+needs_nbd = pytest.mark.skipif("RAUC_TEST_NBD_SERVER" not in os.environ, reason="Missing NBD")
+
+
 def softhsm2_load_key_pair(cert, privkey, label, id_, softhsm2_mod):
     proc = subprocess.run(
         f"openssl x509 -in {cert} -inform pem -outform der "

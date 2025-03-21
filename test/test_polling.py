@@ -192,6 +192,7 @@ def test_poll_install_criteria(create_system_files, system, http_server, sys_ver
         pytest.param(True, "failed-update", (False, True), id="bad config"),
     ],
 )
+@needs_nbd
 def test_poll_reboot_criteria(create_system_files, system, http_server, tmp_path, remove_appfs, criteria, result):
     """Test if the info command sends custom headers correctly."""
     reboot_flag = tmp_path / "reboot-flag"
