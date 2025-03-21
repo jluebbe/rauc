@@ -3,6 +3,8 @@ import time
 import pytest
 from dasbus.typing import get_native
 
+from conftest import needs_nbd
+
 
 def wait_one_poll(system, *, timeout=15.0):
     start = time.monotonic()
