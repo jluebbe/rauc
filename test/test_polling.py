@@ -139,6 +139,7 @@ def test_poll_candidate_criteria(create_system_files, system, http_server, sys_v
         ),
     ],
 )
+@needs_nbd
 def test_poll_install_criteria(create_system_files, system, http_server, sys_ver, criteria, result):
     """Test if the info command sends custom headers correctly."""
     http_server.setup(
