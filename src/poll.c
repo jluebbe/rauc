@@ -297,7 +297,6 @@ static gboolean poll_install(RPollSource *poll_source, GError **error)
 	r_installer_set_operation(r_installer, "installing");
 	res = install_run(args);
 	if (!res) {
-		message = g_strdup("Failed to launch install thread");
 		args->status_result = 1;
 		goto out;
 	}
