@@ -1099,7 +1099,7 @@ out:
 	return res;
 }
 
-static gboolean check_workdir_content(const gchar *path, GError **error)
+static gboolean check_workdir_content(const gchar *path, gboolean top_level, GError **error)
 {
 	GError *ierror = NULL;
 	g_autofree gchar *name = g_path_get_basename(path);
@@ -1135,6 +1135,12 @@ static gboolean check_workdir_content(const gchar *path, GError **error)
 	}
 
 	if (g_file_test(path, G_FILE_TEST_IS_DIR)) {
+		if (top_level && g_str_has_prefix(name, ".")) {
+			g_set_error(error, R_BUNDLE_ERROR, R_BUNDLE_ERROR_PAYLOAD,
+				"hidden directories are not supported as top-level bundle contents (%s)",
+				name);
+			return FALSE;
+		}
 		return TRUE;
 	}
 
@@ -1147,52 +1153,40 @@ static gboolean check_workdir_content(const gchar *path, GError **error)
 	return TRUE;
 }
 
-static gboolean link_contentdir_to_workdir(const gchar *contentdir, const gchar *workdir, GError **error)
+static gboolean link_contentdir_to_workdir(const gchar *contentdir, const gchar *workdir, gboolean top_dir, GError **error)
 {
 	GError *ierror = NULL;
-	g_autoptr(GDir) dir = NULL;
-	const gchar *name;
-	struct stat stat_data;
 
-	dir = g_dir_open(contentdir, 0, &ierror);
+	g_autoptr(GDir) dir = g_dir_open(contentdir, 0, &ierror);
 	if (!dir) {
 		g_propagate_error(error, ierror);
 		return FALSE;
 	}
 
+	const gchar *name;
 	while ((name = g_dir_read_name(dir))) {
-		g_autofree gchar *oldpath = NULL;
-		g_autofree gchar *newpath = NULL;
-
 		if (g_strcmp0(name, ".rauc-workdir") == 0)
 			continue;
 
-		oldpath = g_build_filename(contentdir, name, NULL);
-
-		if (!check_workdir_content(oldpath, &ierror)) {
+		g_autofree gchar *oldpath = g_build_filename(contentdir, name, NULL);
+		if (!check_workdir_content(oldpath, top_dir, &ierror)) {
 			g_propagate_error(error, ierror);
 			return FALSE;
 		}
 
-		newpath = g_build_filename(workdir, name, NULL);
+		g_autofree gchar *newpath = g_build_filename(workdir, name, NULL);
 
 		if (g_file_test(oldpath, G_FILE_TEST_IS_DIR)) {
-			if (name[0] == '.') {
-				g_set_error(error, R_BUNDLE_ERROR, R_BUNDLE_ERROR_PAYLOAD,
-						"hidden directories are not supported as bundle contents (%s)",
-						name);
-				return FALSE;
-			}
-
+			struct stat stat_data = {};
 			g_stat(oldpath, &stat_data);
-			if (g_mkdir(newpath, stat_data.st_mode & ~S_IFMT) != 0) {
+			if (g_mkdir(newpath, stat_data.st_mode & (S_IRWXU|S_IRWXG|S_IRWXO)) != 0) {
 				int err = errno;
 				g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(err),
-						"failed to create the workdir '%s': %s", newpath, g_strerror(err));
+						"failed to create workdir '%s': %s", newpath, g_strerror(err));
 				return FALSE;
 			}
 
-			if (!link_contentdir_to_workdir(oldpath, newpath, &ierror)) {
+			if (!link_contentdir_to_workdir(oldpath, newpath, FALSE, &ierror)) {
 				g_propagate_error(error, ierror);
 				return FALSE;
 			}
@@ -1242,8 +1236,8 @@ static gchar *prepare_workdir(const gchar *contentdir, GError **error)
 		return NULL;
 	}
 
-	if (!link_contentdir_to_workdir(contentdir, workdir, &ierror)) {
-		g_propagate_prefixed_error(error, ierror, "Failed to move contentdir contents to workdir: ");
+	if (!link_contentdir_to_workdir(contentdir, workdir, TRUE, &ierror)) {
+		g_propagate_error(error, ierror);
 		return NULL;
 	}
 

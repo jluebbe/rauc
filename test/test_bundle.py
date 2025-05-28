@@ -193,7 +193,7 @@ def test_bundle_content_checks(tmp_path, bundle):
     bundle.output.unlink()
     test_file.unlink()
 
-    # directories are allowed
+    # non-directories are allowed
     test_dir = bundle.content / "subdir"
     test_dir.mkdir()
     bundle.build()
