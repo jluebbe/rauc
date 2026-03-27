@@ -18,7 +18,7 @@ jobs:
       run: |
         sudo apt-get update
         DEBIAN_FRONTEND='noninteractive' sudo apt-get install -qy qemu-user-static
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Build Images
       id: build-image
       uses: redhat-actions/buildah-build@v2

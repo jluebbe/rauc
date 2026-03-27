@@ -20,7 +20,7 @@ jobs:
         gcc --version
         ls -la /usr/bin/clang*
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Run meson
       run: |
@@ -32,7 +32,7 @@ jobs:
 
     - name: Upload scan-build report
       if: failure()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: scan-build-report
         path: build/meson-logs/scanbuild/*
