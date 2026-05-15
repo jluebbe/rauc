@@ -9,7 +9,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/jluebbe/qemu/rauc-ci-qemu:latest
+      image: ghcr.io/jluebbe/qemu/rauc-ci-qemu:trixie
       # allow mounting and devtmpfs in the container
       options: --user=root --privileged -v /dev:/dev
     steps:
