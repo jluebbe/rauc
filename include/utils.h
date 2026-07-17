@@ -225,20 +225,30 @@ G_GNUC_WARN_UNUSED_RESULT;
  * Resolve path based on directory of `basefile` argument or current working dir.
  *
  * This is useful for parsing paths from config files where the path locations
- * may depend on the config files location. In this case `path` would be the
+ * may depend on the config file’s location. In this case `path` would be the
  * pathname set in the config file, and `basefile` would be the path to the
  * config file itself.
  *
- * If given path itself is absolute, this will be returned.
- * If `basefile` is given and absolute, its location (with the pathname
- * stripped) will be used as the prefix path for `path`.
- * If `basefile` is not an absolute path, the current workding dir will be used
- * as the prefix path for `path` instead.
+ * The function behaves as follows:
  *
- * @param basefile Reference path to resolve `path` to
- * @param path The path to resolve an absolute path for
+ * - If `path` is NULL, NULL is returned.
+ * - If `path` starts with the "pkcs11:" URI scheme, it is returned unchanged.
+ * - If `path` is absolute, it is returned unchanged.
+ * - If `path` is relative and `basefile` is NULL, it is resolved relative to
+ *   the current working directory.
+ * - If `path` is relative and `basefile` is given:
+ *   - If the directory part of `basefile` is absolute, `path` is resolved
+ *     relative to that directory.
+ *   - If the directory part of `basefile` is relative, `path` is resolved
+ *     relative to the current working directory followed by the directory
+ *     part of `basefile`.
  *
- * @return An absolute path name, determined as described above, NULL if undeterminable
+ * @param basefile Reference path used to resolve `path`, or NULL to use the
+ *                 current working directory.
+ * @param path The path to resolve.
+ *
+ * @return A newly allocated string containing the resolved path, or NULL if
+ *         `path` is NULL.
  *         [transfer full]
  */
 gchar *resolve_path(const gchar *basefile, const gchar *path)
@@ -278,13 +288,16 @@ gchar * key_file_consume_string(
 G_GNUC_WARN_UNUSED_RESULT;
 
 /**
- * Ensure that the input string contains neither whitespace nor tab.
+ * Ensure that the input string contains no whitespace.
+ *
+ * Whitespace is checked using g_ascii_isspace (i.e. space, tab, CR, LF,
+ * VT, FF).
  *
  * @param str string to check.
  *
- * @return TRUE if str contains neither whitespace nor tab, FALSE otherwise
+ * @return TRUE if str contains no whitespace, FALSE otherwise
  */
-gboolean value_check_tab_whitespace(const gchar *str, GError **error)
+gboolean value_check_whitespace(const gchar *str, GError **error)
 G_GNUC_WARN_UNUSED_RESULT;
 
 /**
@@ -300,6 +313,27 @@ G_GNUC_WARN_UNUSED_RESULT;
 guint64 key_file_consume_binary_suffixed_string(GKeyFile *key_file,
 		const gchar *group_name,
 		const gchar *key,
+		GError **error)
+G_GNUC_WARN_UNUSED_RESULT;
+
+/**
+ * Get list of string arguments from key and remove key from key_file.
+ *
+ * Optionally filter
+ *
+ * @param key_file a GKeyFile
+ * @param group_name the group name
+ * @param key the key name
+ * @param allowed a list of allowed strings, or NULL
+ * @param error return location for a GError, or NULL
+ *
+ * @return a GStrv or NULL if the key was not found or an error occurred
+ */
+gchar **key_file_consume_string_list(
+		GKeyFile *key_file,
+		const gchar *group_name,
+		const gchar *key,
+		const gchar * const *allowed,
 		GError **error)
 G_GNUC_WARN_UNUSED_RESULT;
 

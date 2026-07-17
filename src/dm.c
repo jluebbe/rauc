@@ -56,7 +56,7 @@ void r_dm_free(RaucDM *dm)
 	g_free(dm);
 }
 
-static const gchar* dmtype_to_str(RaucDMType dmtype)
+static const gchar *dmtype_to_str(RaucDMType dmtype)
 {
 	switch (dmtype) {
 		case RAUC_DM_VERITY:
@@ -113,7 +113,7 @@ gboolean r_dm_setup(RaucDM *dm, GError **error)
 	gboolean res = FALSE;
 	int dmfd = -1;
 	int checkfd = -1;
-	char checkbuf[1];
+	char checkbuf[1] = {};
 	struct {
 		struct dm_ioctl header;
 		struct dm_target_spec target_spec;

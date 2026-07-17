@@ -61,7 +61,7 @@ RaucBundleAccessArgs access_args = {0};
 
 static gchar* make_progress_line(gint percentage)
 {
-	struct winsize w;
+	struct winsize w = {};
 	GString *printbuf = NULL;
 	gint pbar_len = 0;
 
@@ -754,42 +754,49 @@ static gboolean extract_start(int argc, char **argv)
 	if (argc < 3) {
 		g_printerr("An input bundle must be provided\n");
 		r_exit_status = 1;
-		goto out;
+		return TRUE;
 	}
 
 	if (argc < 4) {
 		g_printerr("An output directory must be provided\n");
 		r_exit_status = 1;
-		goto out;
+		return TRUE;
 	}
 
 	if (argc > 4) {
 		g_printerr("Excess argument: %s\n", argv[4]);
 		r_exit_status = 1;
-		goto out;
+		return TRUE;
 	}
 
-	g_debug("input bundle: %s", argv[2]);
-	g_debug("output dir: %s", argv[3]);
+	g_autofree gchar* inbundle = g_strdup(argv[2]);
+	g_autofree gchar* outdir = g_strdup(argv[3]);
+
+	/* strip trailing slash for later path existence check */
+	if (g_str_has_suffix(outdir, "/")) {
+		outdir[strlen(outdir)-1] = '\0';
+	}
+
+	g_debug("input bundle: %s", inbundle);
+	g_debug("output dir: %s", outdir);
 
 	if (trust_environment)
 		check_bundle_params |= CHECK_BUNDLE_TRUST_ENV;
 
-	if (!check_bundle(argv[2], &bundle, check_bundle_params, NULL, &ierror)) {
+	if (!check_bundle(inbundle, &bundle, check_bundle_params, NULL, &ierror)) {
 		g_printerr("%s\n", ierror->message);
 		g_clear_error(&ierror);
 		r_exit_status = 1;
-		goto out;
+		return TRUE;
 	}
 
-	if (!extract_bundle(bundle, argv[3], &ierror)) {
+	if (!extract_bundle(bundle, outdir, &ierror)) {
 		g_printerr("Failed to extract bundle: %s\n", ierror->message);
 		g_clear_error(&ierror);
 		r_exit_status = 1;
-		goto out;
+		return TRUE;
 	}
 
-out:
 	return TRUE;
 }
 
@@ -1107,7 +1114,8 @@ static gchar *info_formatter_readable(RaucManifest *manifest)
 		} else {
 			g_string_append_printf(text, "    (no image file)\n");
 		}
-		g_string_append_printf(text, "    Type:      %s%s\n", img->type, img->type_from_fileext ? " (detected)" : "");
+		if (!img->artifact) // as long as 'type' is not supported for artifacts, don't display it for artifacts
+			g_string_append_printf(text, "    Type:      %s%s\n", img->type, img->type_from_fileext ? " (detected)" : "");
 		if (img->filename) {
 			g_autofree gchar* formatted_size = g_format_size_full(img->checksum.size, G_FORMAT_SIZE_LONG_FORMAT);
 			g_string_append_printf(text, "    Checksum:  %s\n", img->checksum.digest);
@@ -1472,7 +1480,7 @@ static void r_string_append_slot(GString *text, RaucSlot *slot, RaucStatusPrint 
 	if (slot->mount_point)
 		g_string_append_printf(text, "\n      mounted: %s", slot->mount_point);
 	if (slot->bootname)
-		g_string_append_printf(text, "\n      boot status: %s", slot->boot_good ? KGRN "good"KNRM : KRED "bad"KNRM);
+		g_string_append_printf(text, "\n      boot status: %s%s%s", (slot->boot_state == ST_BOOT_GOOD) ? KGRN : KRED, r_slot_bootstate_to_str(slot->boot_state), KNRM);
 	if (status_detailed && slot_state) {
 		g_string_append_printf(text, "\n      slot status:");
 		g_string_append_printf(text, "\n          bundle:");
@@ -1694,7 +1702,7 @@ static gchar* r_status_formatter_shell(RaucStatusPrint *status)
 		r_ptr_array_add_printf(entries, "RAUC_SLOT_PARENT_%d=%s", slotcnt, slot->parent ? slot->parent->name : "");
 		r_ptr_array_add_printf(entries, "RAUC_SLOT_MOUNTPOINT_%d=%s", slotcnt, slot->mount_point ?: "");
 		if (slot->bootname)
-			r_ptr_array_add_printf(entries, "RAUC_SLOT_BOOT_STATUS_%d=%s", slotcnt, slot->boot_good ? "good" : "bad");
+			r_ptr_array_add_printf(entries, "RAUC_SLOT_BOOT_STATUS_%d=%s", slotcnt, r_slot_bootstate_to_str(slot->boot_state));
 		else
 			r_ptr_array_add_printf(entries, "RAUC_SLOT_BOOT_STATUS_%d=", slotcnt);
 		if (status_detailed && slot_state) {
@@ -1846,7 +1854,7 @@ static gchar* r_status_formatter_json(RaucStatusPrint *status, gboolean pretty)
 		json_builder_add_string_value(builder, slot->mount_point);
 		json_builder_set_member_name(builder, "boot_status");
 		if (slot->bootname)
-			json_builder_add_string_value(builder, slot->boot_good ? "good" : "bad");
+			json_builder_add_string_value(builder, r_slot_bootstate_to_str(slot->boot_state));
 		else
 			json_builder_add_string_value(builder, NULL);
 		if (status_detailed && slot_state) {
@@ -2052,9 +2060,11 @@ static gboolean retrieve_slot_states_via_dbus(GHashTable **slots, GError **error
 		g_variant_dict_lookup(&dict, "mountpoint", "s", &slot->mount_point);
 		g_variant_dict_lookup(&dict, "boot-status", "s", &boot_good);
 		if (g_strcmp0(boot_good, "good") == 0) {
-			slot->boot_good = TRUE;
+			slot->boot_state = ST_BOOT_GOOD;
+		} else if (g_strcmp0(boot_good, "bad") == 0) {
+			slot->boot_state = ST_BOOT_BAD;
 		} else {
-			slot->boot_good = FALSE;
+			slot->boot_state = ST_BOOT_UNKNOWN;
 		}
 
 		if (status_detailed) {
@@ -2370,8 +2380,11 @@ static void create_run_links(void)
 	GHashTableIter iter;
 	RaucSlot *slot;
 
-	if (g_mkdir_with_parents("/run/rauc/slots/active", 0755) != 0) {
-		g_warning("Failed to create /run/rauc/slots/active");
+	g_autofree gchar *run_slots_active = g_build_filename(
+			r_context()->runtime_directory, "slots/active", NULL);
+
+	if (g_mkdir_with_parents(run_slots_active, 0755) != 0) {
+		g_warning("Failed to create %s", run_slots_active);
 		return;
 	}
 
@@ -2386,7 +2399,7 @@ static void create_run_links(void)
 		if (slot->state == ST_BOOTED)
 			booted_slot = slot;
 
-		path = g_build_filename("/run/rauc/slots/active", slot->sclass, NULL);
+		path = g_build_filename(run_slots_active, slot->sclass, NULL);
 
 		if (!r_update_symlink(slot->device, path, &ierror)) {
 			g_warning("Failed to create symlink for active slot: %s", ierror->message);
@@ -2396,15 +2409,18 @@ static void create_run_links(void)
 	if (!booted_slot)
 		return;
 
-	if (g_mkdir_with_parents("/run/rauc/artifacts", 0755) != 0) {
-		g_warning("Failed to create /run/rauc/artifacts");
+	g_autofree gchar *run_artifacts = g_build_filename(
+			r_context()->runtime_directory, "artifacts", NULL);
+
+	if (g_mkdir_with_parents(run_artifacts, 0755) != 0) {
+		g_warning("Failed to create %s", run_artifacts);
 		return;
 	}
 
 	g_hash_table_iter_init(&iter, r_context()->config->artifact_repos);
 	RArtifactRepo *repo;
 	while (g_hash_table_iter_next(&iter, NULL, (gpointer*)&repo)) {
-		g_autofree gchar* path = g_build_filename("/run/rauc/artifacts", repo->name, NULL);
+		g_autofree gchar* path = g_build_filename(run_artifacts, repo->name, NULL);
 		g_autofree gchar* target = NULL;
 
 		if (!repo->parent_class) {
@@ -2651,7 +2667,9 @@ static GOptionEntry entries_status[] = {
 };
 
 static GOptionEntry entries_write_slot[] = {
-	{"image-type", 'l', 0, G_OPTION_ARG_STRING, &write_slot_image_type, "Select explicit image type to use.", NULL},
+	{"image-type", 't', 0, G_OPTION_ARG_STRING, &write_slot_image_type, "Select explicit image type to use.", "TYPE"},
+	/* The 'image-type' shortname was accidentally named 'l' before. This hidden option ensures compatibility with the old shortname */
+	{"image-type-compat", 'l', G_OPTION_FLAG_HIDDEN, G_OPTION_ARG_STRING, &write_slot_image_type, "Select explicit image type to use (compat).", NULL},
 	{0}
 };
 

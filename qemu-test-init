@@ -17,6 +17,10 @@ mount -t tmpfs none /tmp
 mkdir /dev/shm
 mount -t tmpfs none /dev/shm
 
+# create /dev/pts for ssh
+mkdir /dev/pts
+mount -t devpts none /dev/pts
+
 # create overlay for /etc
 mkdir /tmp/etc-overlay /tmp/etc-work
 mount -t overlay overlay -o lowerdir=/etc,upperdir=/tmp/etc-overlay,workdir=/tmp/etc-work /etc
@@ -40,7 +44,15 @@ for x in "$@"; do
     export LSAN_OPTIONS=suppressions="$(pwd)/test/asan.supp"
     export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
   elif [ "$x" = "service-backtrace" ]; then
-    SERVICE_BACKTRACE=1
+    export SERVICE_BACKTRACE=1
+  elif [ "$x" = "service-poll" ]; then
+    export SERVICE_POLL=1
+  elif [ "$x" = "ssh" ]; then
+    SSH=1
+  elif [ "$x" = "background" ]; then
+    INTERACTIVE_SHELL=1
+    BACKGROUND=1
+    SSH=1
   fi
 done
 
@@ -62,6 +74,52 @@ echo "nameserver 10.0.2.3" > /etc/resolv.conf
 
 export HOME="/root"
 
+# setup PATH
+mkdir /tmp/bin
+export PATH=/tmp/bin:$PATH
+# composefs may be a subproject
+if [ -e "$BUILD_DIR/subprojects/composefs/tools" ]; then
+  export PATH="$BUILD_DIR/subprojects/composefs/tools:$PATH"
+  export LD_LIBRARY_PATH="$BUILD_DIR/subprojects/composefs/libcomposefs:$LD_LIBRARY_PATH"
+fi
+
+# setup SSH server if requested
+if [ -n "$SSH" ]; then
+  # clean up motd
+  echo "= RAUC qemu-test VM =" > /etc/motd
+
+  # make shadow readable in the guest and add root entry
+  echo 'root:*:::::::' > /etc/shadow
+
+  # setup login for root
+  mkdir -p /root/.ssh
+  chmod 700 /root/.ssh
+  cp "$(pwd)/.qemu-test-ssh-key.pub" /root/.ssh/authorized_keys
+  chmod 600 /root/.ssh/authorized_keys
+
+  # setup environment
+  {
+    echo "PATH=$PATH"
+    echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+    echo "MESON_BUILD_DIR=$BUILD_DIR"
+  } >> /root/.ssh/environment
+
+  # prepare sshd config
+  cp "$(pwd)/.qemu-test-sshd-config" /etc/ssh/sshd_config
+
+  # generate host key (remove any existing key from the host overlay)
+  rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+  cp "$(pwd)/.qemu-test-ssh-host-key" /etc/ssh/ssh_host_ed25519_key
+  cp "$(pwd)/.qemu-test-ssh-host-key.pub" /etc/ssh/ssh_host_ed25519_key.pub
+
+  # ensure privilege separation directory exists
+  mkdir -p /run/sshd
+
+  # start sshd
+  /usr/sbin/sshd
+  echo "SSH server started on port 22 (host port 2222)"
+fi
+
 # allow git access to our repo
 git config --system --add safe.directory "$(pwd)"
 
@@ -74,9 +132,6 @@ if type setfacl; then
   setfacl -m d:o::rwx /tmp/cov
   export GCOV_PREFIX=/tmp/cov
 fi
-
-mkdir /tmp/bin
-export PATH=/tmp/bin:$PATH
 
 cp test/bin/barebox-state /tmp/bin/barebox-state
 chmod +x /tmp/bin/barebox-state
@@ -108,17 +163,27 @@ EOF
 # fake entropy
 $BUILD_DIR/test/fakerand
 
-# composefs may be a subproject
-if [ -e "$BUILD_DIR/subprojects/composefs/tools" ]; then
-  export PATH="$BUILD_DIR/subprojects/composefs/tools:$PATH"
-  export LD_LIBRARY_PATH="$BUILD_DIR/subprojects/composefs/libcomposefs:$LD_LIBRARY_PATH"
-fi
-
 # rauc binary in PATH
 if [ -n "$INTERACTIVE_SHELL" ]; then
   cp -a $BUILD_DIR/rauc /tmp/bin/rauc
 fi
 export RAUC_TEST_NBD_SERVER="$BUILD_DIR/rauc"
+
+# shell setup
+cat > /root/.profile <<EOF
+export PATH="$PATH"
+
+if [ -n "\$BASH_VERSION" ]; then
+  . "/root/.bashrc"
+fi
+EOF
+cat > /root/.bashrc <<EOF
+alias ll='ls -l'
+
+if [ -n "\$HOST_PWD" ]; then
+  cd "\$HOST_PWD"
+fi
+EOF
 
 if type losetup; then
   truncate --size=64M /tmp/rauc-disk.img
@@ -130,17 +195,26 @@ cat /proc/mtd
 
 if [ -c /dev/mtd0 ] && type flashcp; then
   export RAUC_TEST_MTD_NOR=/dev/mtd0
+  if type mtdpart; then
+    mtdpart add /dev/mtd0 boot-primary 0x0 0x100000
+    mtdpart add /dev/mtd0 boot-secondary 0x100000 0x100000
+    MTD_PRI="/dev/$(grep '"boot-primary"' /proc/mtd | awk -F: '{print $1}')"
+    MTD_SEC="/dev/$(grep '"boot-secondary"' /proc/mtd | awk -F: '{print $1}')"
+    export RAUC_TEST_MTD_FALLBACK="$MTD_PRI;$MTD_SEC"
+  fi
 fi
 
-if [ -c /dev/mtd2 ] && type flash_erase; then
-  export RAUC_TEST_MTD_NAND=/dev/mtd2
-fi
-
-if [ -c /dev/mtd3 ] && type ubiattach; then
-  ubiattach -m 3 -d 0
-  ubimkvol /dev/ubi0 -s 12096KiB -N rauc-test
-  export RAUC_TEST_MTD_UBI=/dev/ubi0
-  export RAUC_TEST_MTD_UBIVOL=/dev/ubi0_0
+if [ -c /dev/mtd2 ]; then
+  if type flash_erase; then
+    export RAUC_TEST_MTD_NAND=/dev/mtd2
+    export RAUC_TEST_MTD_NAND_FALLBACK="/dev/mtd2;/dev/mtd3"
+  fi
+  if type ubiattach; then
+    ubiattach -m 4 -d 0
+    ubimkvol /dev/ubi0 -s 12096KiB -N rauc-test
+    export RAUC_TEST_MTD_UBI=/dev/ubi0
+    export RAUC_TEST_MTD_UBIVOL=/dev/ubi0_0
+  fi
 fi
 
 if [ -b /dev/mmcblk0 ] && type mmc; then
@@ -193,6 +267,20 @@ if [ -n "$SERVICE" ]; then
     echo "" >> /etc/rauc/system.conf
   fi
 
+  if [ -n "$SERVICE_POLL" ]; then
+    export RAUC_TEST_POLLING_SPEEDUP=10
+    echo "" >> /etc/rauc/system.conf
+    echo "[handlers]" >> /etc/rauc/system.conf
+    echo "system-info=$(pwd)/test/bin/systeminfo.sh" >> /etc/rauc/system.conf
+    echo "" >> /etc/rauc/system.conf
+    echo "[polling]" >> /etc/rauc/system.conf
+    echo "url=https://127.0.0.2/test/good-adaptive-meta-bundle.raucb" >> /etc/rauc/system.conf
+    echo "inhibit-files=/run/rauc/inhibit-poll" >> /etc/rauc/system.conf
+    echo "interval-sec=600" >> /etc/rauc/system.conf
+    echo "max-interval-sec=6000" >> /etc/rauc/system.conf
+    echo "reboot-cmd=touch /run/rauc-poll-reboot-pending" >> /etc/rauc/system.conf
+  fi
+
   if grep -q "ENABLE_COMPOSEFS 1" $BUILD_DIR/config.h; then
     echo "" >> /etc/rauc/system.conf
     echo "[artifacts.composefs]" >> /etc/rauc/system.conf
@@ -207,7 +295,9 @@ if [ -n "$SERVICE" ]; then
     cp -a $BUILD_DIR/data/de.pengutronix.rauc.conf /etc/dbus-1/system.d
     chown root:root /etc/dbus-1/system.d/de.pengutronix.rauc.conf
     chmod 644 /etc/dbus-1/system.d/de.pengutronix.rauc.conf
-    mount -t tmpfs none /var/run
+    if [ "$(readlink /var/run)" != "/run" ]; then
+      mount -t tmpfs none /var/run
+    fi
     mkdir -p /var/run/dbus
     time dbus-daemon --system --fork --nopidfile --nosyslog --print-address
 
@@ -231,21 +321,28 @@ if python3 test/nginx_backend.py -s /tmp/backend.sock -d; then
   export RAUC_TEST_HTTP_BACKEND=1
 fi
 
+if [ -n "$SSH" ]; then
+  env | grep ^RAUC_TEST_ >> /root/.ssh/environment
+fi
+
 echo "use ctrl-a x to exit and ctrl-a c to access the qemu monitor"
 
 echo "system ready"
 
 if [ -n "$SERVICE" ]; then
+  sleep 1
   rauc status mark-good
 fi
 
-if [ -n "$INTERACTIVE_SHELL" ]; then
-  echo "alias ll='ls -l'" >> /tmp/bashrc
-  BASH_CMD="exec bash --rcfile /tmp/bashrc"
+ln -s "$(pwd)/.qemu_bash_history" /root/.bash_history
+if [ -n "$BACKGROUND" ]; then
+  # in background mode, just wait (VM is controlled via SSH/QMP)
+  while true; do sleep 3600; done
+elif [ -n "$INTERACTIVE_SHELL" ]; then
+  BASH_CMD="exec bash"
   if type resize; then
     BASH_CMD="eval \$(resize); $BASH_CMD"
   fi
-  HISTFILE="$(pwd)/.qemu_bash_history" \
   setsid bash -c "$BASH_CMD" </dev/ttyS0 >/dev/ttyS0 2>&1 || echo exit-code=$?
   if [ -n "$GCOV_PREFIX" ]; then
     save_gcov_data

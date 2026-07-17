@@ -38,11 +38,11 @@ c_flags = [
 
 giodep = dependency('gio-2.0', version : '>=2.64')
 giounixdep = dependency('gio-unix-2.0', version : '>=2.64')
-openssldep = dependency('openssl', version : '>=1.1.1')
+openssldep = dependency('openssl', version : '>=3.0')
 jsonglibdep = dependency('json-glib-1.0', required : get_option('json'))
 dbusdep = dependency('dbus-1', required : get_option('service'))
 fdiskdep = dependency('fdisk', version : '>=2.29', required : get_option('gpt'))
-libcurldep = dependency('libcurl', version : '>=7.32.0', required : get_option('network'))
+libcurldep = dependency('libcurl', version : '>=7.81.0', required : get_option('network'))
 libnlgenldep = dependency('libnl-genl-3.0', version : '>=3.1', required : get_option('streaming'))
 threaddep = dependency('threads', required : get_option('streaming'))
 composefsdep = dependency('composefs', fallback : ['composefs', 'libcomposefs_dep'], required : get_option('composefs'))
@@ -132,6 +132,7 @@ sources_rauc = files([
   'src/mark.c',
   'src/mbr.c',
   'src/mount.c',
+  'src/polling.c',
   'src/service.c',
   'src/shell.c',
   'src/signature.c',
@@ -177,7 +178,10 @@ endif
 conf.set10('ENABLE_OPENSSL_PKCS11_ENGINE', get_option('pkcs11_engine'))
 
 gnome = import('gnome')
-dbus_ifaces = files('src/de.pengutronix.rauc.Installer.xml')
+dbus_ifaces = files([
+  'src/de.pengutronix.rauc.Installer.xml',
+  'src/de.pengutronix.rauc.Poller.xml',
+])
 dbus_sources = gnome.gdbus_codegen(
   'rauc-installer-generated',
   sources : dbus_ifaces,

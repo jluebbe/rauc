@@ -86,7 +86,7 @@ gchar *r_ptr_array_env_to_shell(const GPtrArray *ptrarray)
 
 	for (guint i = 0; i < ptrarray->len; i++) {
 		const gchar *element = g_ptr_array_index(ptrarray, i);
-		gchar *eq = strchr(element, '=');
+		const gchar *eq = strchr(element, '=');
 
 		if (!eq) {
 			g_error("missing '=' in '%s'", element);
@@ -113,7 +113,7 @@ gchar **r_environ_setenv_ptr_array(gchar **envp, const GPtrArray *ptrarray, gboo
 
 	for (guint i = 0; i < ptrarray->len; i++) {
 		const gchar *element = g_ptr_array_index(ptrarray, i);
-		gchar *eq = strchr(element, '=');
+		const gchar *eq = strchr(element, '=');
 
 		if (!eq) {
 			g_error("missing '=' in '%s'", element);
@@ -135,7 +135,7 @@ void r_subprocess_launcher_setenv_ptr_array(GSubprocessLauncher *launcher, const
 
 	for (guint i = 0; i < ptrarray->len; i++) {
 		const gchar *element = g_ptr_array_index(ptrarray, i);
-		gchar *eq = strchr(element, '=');
+		const gchar *eq = strchr(element, '=');
 
 		if (!eq) {
 			g_error("missing '=' in '%s'", element);
@@ -408,17 +408,18 @@ gchar * key_file_consume_string(
 	return result;
 }
 
-gboolean value_check_tab_whitespace(const gchar *str, GError **error)
+gboolean value_check_whitespace(const gchar *str, GError **error)
 {
 	g_return_val_if_fail(str != NULL, FALSE);
 	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
 
-	if (strchr(str, '\t') || strchr(str, ' ')) {
-		g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE,
-				"The value '%s' can not contain tab or whitespace characters",
-				str
-				);
-		return FALSE;
+	for (const gchar *p = str; *p; p++) {
+		if (g_ascii_isspace(*p)) {
+			g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE,
+					"The value '%s' must not contain whitespace characters",
+					str);
+			return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -454,7 +455,7 @@ guint64 key_file_consume_binary_suffixed_string(GKeyFile *key_file,
 		return 0;
 	}
 
-	gchar *scale;
+	gchar *scale = NULL;
 	guint64 result = g_ascii_strtoull(string, &scale, 10);
 	if (result == 0)
 		return result;
@@ -481,9 +482,48 @@ guint64 key_file_consume_binary_suffixed_string(GKeyFile *key_file,
 	return result << scale_shift;
 }
 
+gchar **key_file_consume_string_list(
+		GKeyFile *key_file,
+		const gchar *group_name,
+		const gchar *key,
+		const gchar * const *allowed,
+		GError **error)
+{
+	GError *ierror = NULL;
+	gsize length = 0;
+
+	g_auto(GStrv) result = g_key_file_get_string_list(key_file, group_name, key, &length, &ierror);
+	if (g_error_matches(ierror, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_KEY_NOT_FOUND)) {
+		/* handle missing key the same as an empty list */
+		g_clear_error(&ierror);
+		return NULL;
+	} else if (ierror) {
+		g_propagate_error(error, ierror);
+		return NULL;
+	}
+
+	g_key_file_remove_key(key_file, group_name, key, NULL);
+
+	if (length == 0)
+		return NULL;
+
+	/* check against allow-list */
+	if (allowed) {
+		for (gsize i = 0; i < length; i++) {
+			if (!g_strv_contains(allowed, result[i])) {
+				g_set_error(error, G_KEY_FILE_ERROR, G_KEY_FILE_ERROR_PARSE,
+						"Unsupported list item '%s' for key '%s' in [%s]", result[i], key, group_name);
+				return NULL;
+			}
+		}
+	}
+
+	return g_steal_pointer(&result);
+}
+
 gchar * r_realpath(const gchar *path)
 {
-	gchar buf[PATH_MAX + 1];
+	gchar buf[PATH_MAX + 1] = {0};
 	gchar *rpath = realpath(path, buf);
 
 	return g_strdup(rpath);

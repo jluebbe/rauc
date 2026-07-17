@@ -3,15 +3,114 @@ Release 1.16 (development)
 
 .. rubric:: Enhancements
 
+* Add support for polling based on the existing HTTP(S) streaming (see
+  :ref:`sec-polling`). (in :pr:`1672`)
+  The polling functionality in RAUC allows a device to periodically check for
+  updates from a specified URL.
+  It fetches bundle manifests, checks for available updates, and initiates
+  installations if necessary.
+  This functionality is intended to automate the update process and ensure that
+  the system remains up-to-date with minimal manual intervention.
+
+  .. note::
+
+    Polling is currently available at a preview level.
+
+    This means that we want to allow users to try out this new feature and report
+    their experiences, but also that your use case may not be fully supported yet.
+    Depending on the feedback, we may need to change behaviour in ways that require
+    corresponding changes to your ``system.conf``.
+    So, try it out and report back `using GitHub discussions
+    <https://github.com/rauc/rauc/discussions/categories/general>`__ or
+    in the `Matrix/IRC chat channel <https://matrix.to/#/#rauc:matrix.org>`__, but
+    don't rely on it for products yet.
+    We intend to stabilize this feature as soon as we have confidence that the
+    common use cases work well.
+
+  For testing, an example HTTP server was added as ``contrib/polling-server``.
+  (by Leonard Göhrs in :pr:`1674`)
+* Add support for (re-)creating missing UEFI boot entries.
+  This can be useful on UEFI implementations which remove UEFI boot entries on
+  their own.
+  (by Bastian Krause in :pr:`1855` and :pr:`1871`)
+* Make the ``RAUC_SYSTEM_COMPATIBLE`` environment variable available to system
+  handlers. (by Bruno Knittel in :pr:`1922`)
+* Introduce an explicit 'unknown' boot state to allow distinguishing the 'bad'
+  state from boot state errors. (in :pr:`1864`)
+
 .. rubric:: Bug fixes
+
+* Avoid NULL pointer dereferences related to use-bundle-signing-time and clarify
+  the intended scope of this option. (in :pr:`1966`)
+* Fix handling of output directories with a trailing slash in ``rauc extract``.
+  (in :pr:`1875`)
+* Check for any whitespace in the bootname, not just space and tab.
+  (in :pr:`1942`)
+* Avoid direct member access for OpenSSL's ``ASN1_STRING``.
+  (by Bruno Thomsen in :pr:`1914`)
 
 .. rubric:: Testing
 
+* Support SSH access to the qemu-test VM and provide a `qemu-ssh` helper
+  script. (in :pr:`1892` and :pr:`1924`)
+* Support running CLI tests with a customized environment. (in :pr:`1968`)
+* Support overriding the kernel commandline and runtime data directory. (in
+  :pr:`1947`)
+* Add more MTD partitions in the qemu-test VM for testing redundant
+  bootloader/firmware updates. (in :pr:`1948`)
+* Add tests for ``rauc mark`` for the EFI bootloader backend. (in :pr:`1857`)
+* Remove testing for Debian bullseye and Ubuntu 20.04. (in :pr:`1925`)
+* Fix some integer conversion warnings by using the correct ``g_assert``
+  variant. (in :pr:`1897`)
+
 .. rubric:: Code
+
+* Require OpenSSL 3.0 or newer. (in :pr:`1926`)
+* Require curl 7.81.0 or newer. (in :pr:`1927`)
+* Harden GitHub Actions workflows by using pinned versions and reduced
+  permissions. (in :pr:`1940` and :pr:`1946`)
+* Enable `OpenSSF ScoreCard analysis
+  <https://securityscorecards.dev/viewer/?uri=github.com/rauc/rauc>`_.
+  (in :pr:`1933`)
+* Enable Dependabot for GitHub Actions. (in :pr:`1932`)
+* Use more ``g_autoptr`` for automatic memory cleanup. (in :pr:`1859`)
+* Simplify ternary operator where possible. (in :pr:`1967`)
+* Slightly simplify system config file parsing (in :pr:`1888`)
+* Zero-initialize all on-stack arrays and structs. (in :pr:`1910`)
+* Avoid some trivial goto out cases. (in :pr:`1898`)
+* Align the pointer coding style across the code-base. (in :pr:`1880`)
+* Restrict expected CMS signature data type for signatures as defense-in-depth.
+  (in :pr:`1876`)
 
 .. rubric:: Documentation
 
-Contributions from:
+* Revise the "Data Storage and Migration" chapter and add examples for migration
+  via hooks. (in :pr:`1917`)
+* Revise the PKI documentation and clarify that the test CA is not appropriate
+  for normal use-cases. (in :pr:`1872`)
+* Rework the variants documentation. (in :pr:`1878`)
+* Revise the ``rauc mark`` documentation. (in :pr:`1903`)
+* Document the dictionary returned by the GetSlotStatus D-Bus method. (in :pr:`1904`)
+* Consistently use semantic line breaks. (in :pr:`1873`)
+
+Contributions from: Bastian Krause (@Bastian-Krause), Bruno Knittel
+(@BrunoKnittelBruker), Bruno Thomsen (@baxeno), Enrico Jörns (@ejoerns), Jan
+Lübbe (@jluebbe), Leonard Göhrs (@hnez)
+
+
+Release 1.15.2 (released Mar 27, 2026)
+--------------------------------------
+
+.. rubric:: Security
+
+* Reject bundles using the 'plain' format which exceed a payload size of 2 GiB
+  during signing and verification.
+  This fixes an integer overflow which results in a signature which covers only
+  the first few bytes of the payload (CVE-2026-34155).
+  See the advisory for more details:
+  https://github.com/rauc/rauc/security/advisories/GHSA-6hj7-q844-m2hx
+
+Contributions from: Jan Lübbe (@jluebbe)
 
 Release 1.15.1 (released Jan 5, 2026)
 -------------------------------------
@@ -58,7 +157,7 @@ Release 1.15 (released Nov 7, 2025)
   See the :ref:`documentation for details <sec-ref-supported-image-types>`.
   (by Lars Schmidt in :pr:`1756`)
 * Add support for an ``emptyfs`` image type, which can be used instead of an
-  emtpy ``tar`` when installing into an ``ext4`` slot.
+  empty ``tar`` when installing into an ``ext4`` slot.
   The newly created filesystem can then be customised with a ``post-install``
   hook.
   (by Lars Schmidt in :pr:`1759`)
@@ -295,8 +394,8 @@ Release 1.13 (released Jan 22, 2025)
     Depending on the feedback, we may need to change behaviour in ways that are
     not backwards compatible.
     So, try it out and report back `using GitHub discussions
-    <https://github.com/rauc/rauc/discussions/categories/artifact-updates>`_ or
-    in the `Matrix/IRC chat channel <https://matrix.to/#/#rauc:matrix.org>`_, but
+    <https://github.com/rauc/rauc/discussions/categories/artifact-updates>`__ or
+    in the `Matrix/IRC chat channel <https://matrix.to/#/#rauc:matrix.org>`__, but
     don't rely on it for products yet.
     We intend to stabilize this feature as soon as we have confidence that the
     common use cases work well.

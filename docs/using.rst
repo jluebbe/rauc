@@ -50,6 +50,7 @@ The ``--cert`` and ``--key`` argument specify the certificate and private key
 for signing the bundle.
 They can be provided either as PEM files or as :ref:`PKCS#11-URIs
 <pkcs11-support>` (to avoid storing sensitive key material as plain files).
+Read the :ref:`sec-security` chapter for more details on signing bundles.
 
 With the optional ``--signing-keyring=<certfile>`` argument, the signed bundle
 can be verified against the keyring file as part of the bundle creation
@@ -116,7 +117,7 @@ By default (or with ``readable``), it will print a human readable representation
 of your system's most important properties.
 Alternatively, with ``shell`` you can obtain a shell-parsable description,
 or with ``json`` or ``json-pretty`` a JSON representation of the system status.
-If more information is needed such as the slots' :ref:`status <slot-status>` add
+If more information is needed such as the slots' :ref:`status <slot-status>`, add
 the command line option ``--detailed``.
 
 .. _sec-run-links:
@@ -138,41 +139,43 @@ points to the correct directory.
 That way, installed artifacts can be found by following
 ``/run/rauc/artifacts/<repository-name>/<artifact-name>``.
 
-React to a Successfully Booted System/Failed Boot
--------------------------------------------------
+Marking a Boot as Successful or Failed
+--------------------------------------
 
-Normally, the full system update chain is not complete before being sure that
-the newly installed system runs without any errors.
-As the definition and detection of a `successful` operation is really
-system-dependent, RAUC provides commands to preserve a slot as being the
-preferred one to boot or to discard a slot from being bootable.
+A system update is only considered complete once the newly installed system has
+been confirmed to be running correctly.
+Since the definition and detection of a successful boot is system-dependent,
+RAUC provides explicit commands and a :ref:`D-Bus Method
+<gdbus-method-de-pengutronix-rauc-Installer.Mark>` to mark the booted slot
+group as either good (confirmed working) or bad (non-working).
 
 .. code-block:: console
 
   # rauc status mark-good
 
-After verifying that the currently booted system is fully operational, one
-wants to signal this information to the underlying bootloader implementation
-which then, for example, resets a boot attempt counter.
+Once the currently booted system is verified as fully operational, run this
+command to signal success to the bootloader.
+Depending on the bootloader backend, this typically resets a boot attempt
+counter and confirms the current slot as the active one.
+
 
 .. code-block:: console
 
   # rauc status mark-bad
 
-If the current boot failed in some kind, this command can be used to communicate
-that to the underlying bootloader implementation. In most cases this will
-disable the currently booted slot or at least switch to a different one.
+If the current boot has failed, run this command to signal failure to the
+bootloader.
+Depending on the bootloader backend, this will either disable the currently
+booted slot or switch to a different one.
 
-Although not very useful in the field, both commands recognize an optional
-argument to explicitly identify the slot to act on:
+To maintain consistency with ``rauc status mark-active``, both commands accept
+an optional slot argument:
 
 .. code-block:: console
 
   # rauc status mark-{good,bad} [booted | other | <SLOT_NAME>]
 
-This is to maintain consistency with respect to ``rauc status mark-active``
-where that argument is definitively wanted, see :ref:`here
-<optional-slot-identifier-argument>`.
+In practice this is rarely needed.
 
 .. _mark-active:
 
@@ -200,15 +203,18 @@ To do so, RAUC offers the subcommand
   # rauc status mark-active [booted | other | <SLOT_NAME>]
 
 where the optional argument decides which slot to (re-)activate at the expense
-of the remaining slots. Choosing ``other`` switches to the next bootable slot
-that is not the one that is currently booted. In a two-slot-setup this is
-just... the other one. If one wants to explicitly address a known slot, one can
-do so by using its slot name which has the form ``<slot-class>.<idx>`` (e.g.
-``rootfs.1``), see :ref:`this <slot.slot-class.idx-section>` part of section
-:ref:`System Configuration File <sec_ref_slot_config>`. Last but not least,
-after switching to a different slot by mistake, before having rebooted this can
-be remedied by choosing ``booted`` as the argument which is, by the way, the
-default if the optional argument has been omitted.
+of the remaining slots.
+Choosing ``other`` switches to the next bootable slot that is not the one that
+is currently booted.
+In a two-slot-setup this is just... the other one.
+If one wants to explicitly address a known slot, one can do so by using its
+slot name which has the form ``<slot-class>.<idx>`` (e.g. ``rootfs.1``), see
+:ref:`this <slot.slot-class.idx-section>` part of section :ref:`System
+Configuration File <sec_ref_slot_config>`.
+Last but not least, after switching to a different slot by mistake,
+before having rebooted this can be remedied by choosing ``booted`` as the
+argument which is, by the way, the default if the optional argument has been
+omitted.
 The date and time of activation as well as the number of activations is part of
 the slot's metadata which is stored in the slot status file, see section
 :ref:`slot-status`.
@@ -216,9 +222,9 @@ the slot's metadata which is stored in the slot status file, see section
 Customizing the Update
 ----------------------
 
-RAUC provides several ways to customize the update process. Some allow adding
-and extending details more fine-grainedly, some allow replacing major parts of
-the default behavior of RAUC.
+RAUC provides several ways to customize the update process.
+Some allow adding and extending details more fine-grainedly,
+some allow replacing major parts of the default behavior of RAUC.
 
 In general, there exist three major types of customization:
 
@@ -230,19 +236,21 @@ The first type, configuration parameters, allow controlling parameters of the
 update in a predefined way.
 
 The second type, using `handlers`, allows extending or replacing the
-installation process. They are executables (most likely shell scripts) located
-in the root filesystem and configured in the system's configuration file. They
-control static behavior of the system that should remain the same over future
-updates.
+installation process.
+They are executables (most likely shell scripts) located in the root filesystem
+and configured in the system's configuration file.
+They control static behavior of the system that should remain the same over
+future updates.
 
-The last type are `hooks`. They are similar to `handlers`, except that they are
-contained in the update bundle. Thus they allow to flexibly extend or customize
-one or more updates by some special behavior.
+The last type are `hooks`.
+They are similar to `handlers`, except that they are contained in the update
+bundle.
+Thus they allow to flexibly extend or customize one or more updates by some
+special behavior.
 A common example would be using a per-slot post-install hook that handles
-configuration migration for a new software version. Hooks are especially useful
-to handle details of installing an update which were not considered in the
-previously deployed version.
-
+configuration migration for a new software version.
+Hooks are especially useful to handle details of installing an update which
+were not considered in the previously deployed version.
 
 In the following, configuration parameters, handlers and hooks will be
 explained in more detail.
@@ -275,7 +283,8 @@ scripts, see the :ref:`sec-handler-interface` section.
 
 RAUC will call the pre-install handler (if given) during the bundle
 installation process, right before calling the default or custom installation
-process. At this stage, the bundle is mounted, its content is accessible and the
+process.
+At this stage, the bundle is mounted, its content is accessible and the
 target group has been determined successfully.
 
 If calling the handler fails or the handler returns a non-zero exit code, RAUC
@@ -291,8 +300,9 @@ will abort installation with an error.
   post-install=/usr/lib/rauc/post-install
 
 The post-install handler will be called right after RAUC successfully performed
-a system update. If any error occurred during installation, the post-install
-handler will not be called.
+a system update.
+If any error occurred during installation, the post-install handler will not be
+called.
 
 Note that a failed call of the post-install handler or a non-zero exit code
 will cause a notification about the error but will not change the result of the
@@ -308,9 +318,9 @@ restart of the system.
   [handlers]
   system-info=/usr/lib/rauc/system-info
 
-The system-info handler is called after loading the configuration file. This
-way it can collect additional variables from the system, like the system's
-serial number.
+The system-info handler is called after loading the configuration file.
+This way it can collect additional variables from the system,
+like the system's serial number.
 
 The handler script can return variables by echoing ``<VARIABLE-NAME>=<value>``
 to stdout, like ``RAUC_SYSTEM_SERIAL`` or ``RAUC_SYSTEM_VARIANT``.
@@ -349,9 +359,9 @@ For each invoked hook, the common hook executable will be called with a
 specific argument indicating the name of the invoked hook.
 The executable is responsible for multiplexing the different hook calls.
 
-In the following the available hooks are listed. Depending on their purpose,
-some are image-specific, i.e. they will be executed for the installation of a
-specific image only, while some other are global.
+In the following the available hooks are listed.
+Depending on their purpose, some are image-specific, i.e. they will be executed
+for the installation of a specific image only, while some other are global.
 
 .. _sec-install-hooks:
 
@@ -407,13 +417,14 @@ the hook executable as the rejection reason message and provide it to the user:
 Slot Hooks
 ^^^^^^^^^^
 
-Slot hooks are called for each slot an image will be installed to. In order to
-enable them, you have to specify them in the ``hooks`` key under the respective
-``image`` section.
+Slot hooks are called for each slot an image will be installed to.
+In order to enable them, you have to specify them in the ``hooks`` key under
+the respective ``image`` section.
 
 Note that hook slot operations will be passed to the executable with the prefix
-``slot-``. Thus if you intend to check for the pre-install hook, you have to
-check for the argument to be ``slot-pre-install``.
+``slot-``.
+Thus if you intend to check for the pre-install hook, you have to check for the
+argument to be ``slot-pre-install``.
 
 For a detailed list of all environment variables exported for the hooks
 executable, see the :ref:`sec-slot-hook-interface` section.
@@ -442,10 +453,11 @@ installation to be aborted with an error.
 .. rubric:: Post-Install Hook
 
 The post-install hook will be called right after the update procedure for the
-respective slot was finished successfully. For slot types that represent a
-mountable file system, the hook will be executed with having the file system
-mounted. This allows to write some post-install information to the slot. It is
-also useful to copy files from the currently active system to the newly
+respective slot was finished successfully.
+For slot types that represent a mountable file system, the hook will be
+executed with having the file system mounted.
+This allows to write some post-install information to the slot.
+It is also useful to copy files from the currently active system to the newly
 installed slot, for example to preserve application configuration data.
 
 .. code-block:: cfg
@@ -483,13 +495,14 @@ An example on how to use a post-install hook:
 .. rubric:: Install Hook
 
 The install hook will replace the entire default installation process for the
-target slot of the image it was specified for. Note that when having the install
-hook enabled, pre- and post-install hooks will *not* be executed and having
-an image (i.e. ``filename`` set) is optional, too!
-The install hook allows to fully customize the way a slot is updated. This
-allows performing special installation methods that are not natively supported
-by RAUC, for example to upgrade the bootloader to a new version while also
-migrating configuration settings.
+target slot of the image it was specified for.
+Note that when having the install hook enabled, pre- and post-install hooks
+will *not* be executed and having an image (i.e. ``filename`` set) is optional,
+too!
+The install hook allows to fully customize the way a slot is updated.
+This allows performing special installation methods that are not natively
+supported by RAUC, for example to upgrade the bootloader to a new version while
+also migrating configuration settings.
 
 .. code-block:: cfg
 
@@ -669,6 +682,39 @@ Obtain bundle information
 
   $ busctl call de.pengutronix.rauc / de.pengutronix.rauc.Installer InspectBundle sa{sv} "<bundle-path>/<bundle-url>" 0
 
+Examples Using Python ``dasbus``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The python `dasbus <https://dasbus.readthedocs.io/en/latest/>`_ library is a
+convenient option to test D-Bus interaction with the RAUC service.
+It is also used in RAUC's pytest-based tests.
+
+Here is a short example for printing the status of all slots (using the
+``GetSlotStatus`` property) and marking the booted slot as good (using the
+``Mark`` Method):
+
+.. code-block:: python
+
+  #!/usr/bin/env python3
+
+  import json
+  from dasbus.connection import SystemMessageBus
+
+  bus = SystemMessageBus()
+  installer = bus.get_proxy(
+      "de.pengutronix.rauc",
+      "/",
+      "de.pengutronix.rauc.Installer",
+  )
+
+  # Get slot status
+  slots = installer.GetSlotStatus()
+  print(json.dumps(dict(slots), indent=2, default=str))
+
+  # Mark booted slot as good
+  slot_name, message = installer.Mark("good", "booted")
+  print(f"Marked '{slot_name}' as good: {message}")
+
 .. _debugging:
 
 Debugging RAUC
@@ -770,7 +816,8 @@ service file).
 
 For more fine grained and advanced debugging options, use the
 ``G_MESSAGES_DEBUG`` environment variable.
-This allows enabling different log domains. Currently available are:
+This allows enabling different log domains.
+Currently available are:
 
 :all: enable all log domains
 

@@ -11,6 +11,8 @@
 #include "utils.h"
 
 #define SHA256_LEN 32
+#define MAX_CHUNK_COUNT 0x7ffffff /* limit index size to below 4 GiB */
+G_STATIC_ASSERT(MAX_CHUNK_COUNT <= (G_MAXUINT32/SHA256_LEN));
 
 GQuark r_hash_index_error_quark(void)
 {
@@ -25,7 +27,7 @@ GQuark r_hash_index_error_quark(void)
 static void hash_chunk(RaucHashIndexChunk *chunk)
 {
 	EVP_MD_CTX *mdctx;
-	uint8_t tmp[EVP_MAX_MD_SIZE];
+	uint8_t tmp[EVP_MAX_MD_SIZE] = {};
 	unsigned int tmp_size = 0;
 
 	mdctx = EVP_MD_CTX_new();
@@ -54,12 +56,14 @@ static void hash_chunk(RaucHashIndexChunk *chunk)
 static GBytes *hash_file(int data_fd, guint32 count, GError **error)
 {
 	GError *ierror = NULL;
-	g_autoptr(GByteArray) hashes = g_byte_array_set_size(g_byte_array_new(), ((guint)count)*SHA256_LEN);
+	g_autoptr(GByteArray) hashes = g_byte_array_new();
 	g_autofree RaucHashIndexChunk *chunk = g_new0(RaucHashIndexChunk, 1);
 
 	g_return_val_if_fail(data_fd >= 0, NULL);
-	g_return_val_if_fail(count > 0, NULL);
+	g_return_val_if_fail(count > 0 && count <= MAX_CHUNK_COUNT, NULL);
 	g_return_val_if_fail(error == NULL || *error == NULL, FALSE);
+
+	g_byte_array_set_size(hashes, ((guint)count)*SHA256_LEN);
 
 	if (lseek(data_fd, 0, SEEK_SET) != 0) {
 		int err = errno;
@@ -143,13 +147,14 @@ static guint32 *build_lookup(GBytes *hashes)
 	g_return_val_if_fail(hashes != NULL, NULL);
 
 	count = g_bytes_get_size(hashes) / SHA256_LEN;
+	g_assert(count <= MAX_CHUNK_COUNT);
 	lookup = g_new(guint32, count);
 
 	for (guint32 i = 0; i < count; i++) {
 		lookup[i] = i;
 	}
 
-	qsort_r(lookup, count, sizeof(guint32), lookup_compare_sort, (void*)g_bytes_get_data(hashes, NULL));
+	qsort_r(lookup, count, sizeof(guint32), lookup_compare_sort, (void *)g_bytes_get_data(hashes, NULL));
 
 	return lookup;
 }
@@ -199,7 +204,7 @@ static guint32 get_chunk_count(int data_fd, GError **error)
 				R_HASH_INDEX_ERROR_SIZE,
 				"image/partition is empty");
 		return 0;
-	} else if ((size / 4096) > (off_t)G_MAXUINT32) {
+	} else if ((size / 4096) > (off_t)MAX_CHUNK_COUNT) {
 		g_set_error(error,
 				R_HASH_INDEX_ERROR,
 				R_HASH_INDEX_ERROR_SIZE,

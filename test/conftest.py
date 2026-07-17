@@ -31,7 +31,7 @@ shutil._USE_CP_SENDFILE = False
 meson_build = os.environ.get("MESON_BUILD_DIR")
 if not meson_build:
     raise Exception("Please set MESON_BUILD_DIR to point to the meson build directory.")
-if not os.path.isabs(meson_build):
+if not Path(meson_build).is_absolute():
     meson_build = os.path.abspath(meson_build)
 
 
@@ -48,12 +48,12 @@ def env_setup(monkeysession):
     monkeysession.setenv("TZ", "UTC")
     monkeysession.setenv("DBUS_STARTER_BUS_TYPE", "session")
 
-    os.chdir(f"{os.path.dirname(os.path.abspath(__file__))}")
+    os.chdir(Path(__file__).resolve().parent)
 
 
 @cache
 def meson_buildoptions():
-    with open(os.path.join(meson_build, "meson-info/intro-buildoptions.json")) as f:
+    with open(Path(meson_build) / "meson-info/intro-buildoptions.json") as f:
         data = json.loads(f.read())
 
     return {o["name"]: o for o in data}
@@ -61,7 +61,7 @@ def meson_buildoptions():
 
 @cache
 def string_in_config_h(findstring):
-    with open(os.path.join(meson_build, "config.h")) as f:
+    with open(Path(meson_build) / "config.h") as f:
         if findstring in f.read():
             return True
     return False
@@ -154,6 +154,7 @@ def _have_qemu():
 have_qemu = pytest.mark.skipif(not _have_qemu(), reason="Not in qemu-test")
 
 no_service = pytest.mark.skipif(string_in_config_h("ENABLE_SERVICE 1"), reason="Have service")
+needs_service = pytest.mark.skipif(not string_in_config_h("ENABLE_SERVICE 1"), reason="Missing service")
 
 
 def have_service():
@@ -164,6 +165,9 @@ needs_emmc = pytest.mark.skipif("RAUC_TEST_EMMC" not in os.environ, reason="Miss
 
 
 needs_composefs = pytest.mark.skipif(not string_in_config_h("ENABLE_COMPOSEFS 1"), reason="Missing composefs support")
+
+
+needs_nbd = pytest.mark.skipif("RAUC_TEST_NBD_SERVER" not in os.environ, reason="Missing NBD")
 
 
 def softhsm2_load_key_pair(cert, privkey, label, id_, softhsm2_mod, tmp_path):
@@ -322,11 +326,11 @@ def prepare_softhsm2(tmp_path, softhsm2_mod):
 
 @pytest.fixture(scope="session")
 def pkcs11(tmp_path_factory):
-    if os.path.exists("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"):
+    if Path("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so").exists():
         softhsm2_mod = "/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"
     else:
         softhsm2_mod = "/usr/lib/softhsm/libsofthsm2.so"
-    if not os.path.exists(softhsm2_mod):
+    if not Path(softhsm2_mod).exists():
         pytest.skip("libsofthsm2.so not available on system")
 
     prepare_softhsm2(tmp_path_factory.mktemp("blub"), softhsm2_mod)
@@ -370,15 +374,15 @@ def dbus_session_bus(tmp_path_factory):
 
 @pytest.fixture
 def create_system_files(env_setup, tmp_path):
-    os.mkdir(tmp_path / "images")
-    open(tmp_path / "images/rootfs-0", mode="w").close()
-    open(tmp_path / "images/rootfs-1", mode="w").close()
-    open(tmp_path / "images/appfs-0", mode="w").close()
-    open(tmp_path / "images/appfs-1", mode="w").close()
-    os.mkdir(tmp_path / "repos")
-    os.mkdir(tmp_path / "repos/files")
-    os.mkdir(tmp_path / "repos/trees")
-    os.mkdir(tmp_path / "repos/composefs")
+    (tmp_path / "images").mkdir()
+    (tmp_path / "images/rootfs-0").touch()
+    (tmp_path / "images/rootfs-1").touch()
+    (tmp_path / "images/appfs-0").touch()
+    (tmp_path / "images/appfs-1").touch()
+    (tmp_path / "repos").mkdir()
+    (tmp_path / "repos/files").mkdir()
+    (tmp_path / "repos/trees").mkdir()
+    (tmp_path / "repos/composefs").mkdir()
     os.symlink(os.path.abspath("bin"), tmp_path / "bin")
     os.symlink(os.path.abspath("openssl-ca"), tmp_path / "openssl-ca")
     os.symlink(os.path.abspath("openssl-enc"), tmp_path / "openssl-enc")
@@ -518,6 +522,7 @@ class System:
         self.tmp_path = tmp_path
         self.output = tmp_path / "system.conf"
         self.data_dir = tmp_path / "data_dir"
+        self.run_dir = tmp_path / "run_dir"
 
         self.config = ConfigParser()
         self.config["system"] = {
@@ -529,6 +534,22 @@ class System:
 
         self.service = None
         self.proxy = None
+
+        self.env_kernel_cmdline = None
+
+    @property
+    def env(self):
+        env = {
+            "RAUC_TEST_RUNTIME_DIRECTORY": str(self.run_dir),
+        }
+
+        if self.env_kernel_cmdline:
+            env["RAUC_TEST_CMDLINE"] = str(self.env_kernel_cmdline)
+
+        return env
+
+    def run(self, command, *, timeout=30):
+        return run(f"{self.prefix} {command}", timeout=timeout, extra_env=self.env)
 
     def prepare_minimal_config(self):
         self.config["system"] = {
@@ -600,8 +621,8 @@ class System:
             "parent": "rootfs.2",
         }
         # create target devices for third slot group
-        open(self.tmp_path / "images/rootfs-2", mode="w").close()
-        open(self.tmp_path / "images/appfs-2", mode="w").close()
+        (self.tmp_path / "images/rootfs-2").touch()
+        (self.tmp_path / "images/appfs-2").touch()
         # prepare grub env for 3 slots
         run(
             f'grub-editenv {self.tmp_path}/grubenv.test set ORDER="A B C" A_TRY="0" B_TRY="0" C_TRY="0" A_OK="1" B_OK="1" C_OK="1"'
@@ -619,7 +640,7 @@ class System:
             self.config.write(f, space_around_delimiters=False)
 
     @contextmanager
-    def running_service(self, bootslot):
+    def running_service(self, bootslot, *, polling_speedup=None, extra_env=None):
         if not have_service():
             # TODO avoid unnescesary setup by moving using a pytest mark for all service/noservice cases
             pytest.skip("No service")
@@ -628,7 +649,12 @@ class System:
         assert self.proxy is None
 
         env = os.environ.copy()
+        env.update(self.env)
         env["RAUC_PYTEST_TMP"] = str(self.tmp_path)
+        if polling_speedup:
+            env["RAUC_TEST_POLLING_SPEEDUP"] = f"{polling_speedup}"
+        if extra_env:
+            env.update(extra_env)
 
         self.service = subprocess.Popen(
             f"rauc service --conf={self.output} --mount={self.tmp_path}/mnt --override-boot-slot={bootslot}".split(),
@@ -707,13 +733,16 @@ class HTTPServer:
             self.server.kill()
             self.server.wait()
 
-    def setup(self, *, file_path):
+    def setup(self, *, file_path=None, http_code=None):
+        json = {}
+        if file_path is not None:
+            json["file_path"] = os.path.abspath(file_path)
+        if http_code is not None:
+            json["http_code"] = http_code
         resp = requests.post(
             f"{self.base}/setup",
             timeout=5,
-            json={
-                "file_path": os.path.abspath(file_path),
-            },
+            json=json,
         )
         resp.raise_for_status()
 

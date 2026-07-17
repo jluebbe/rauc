@@ -20,7 +20,6 @@
 #include "install.h"
 #include "manifest.h"
 #include "mark.h"
-#include "mount.h"
 #include "service.h"
 #include "shell.h"
 #include "signature.h"
@@ -47,6 +46,11 @@ static void install_args_update(RaucInstallArgs *args, const gchar *msg, ...)
 
 	g_return_if_fail(args);
 	g_return_if_fail(msg);
+
+	/* Without a notify function, there is nothing to do. This is used when
+	 * an installation is triggered by polling. */
+	if (!args->notify)
+		return;
 
 	va_start(list, msg);
 	formatted = g_strdup_vprintf(msg, list);
@@ -255,14 +259,18 @@ gboolean determine_boot_states(GError **error)
 	/* get boot state */
 	g_hash_table_iter_init(&iter, r_context()->config->slots);
 	while (g_hash_table_iter_next(&iter, NULL, (gpointer*) &slot)) {
+		gboolean boot_good;
 		g_autoptr(GError) ierror = NULL;
 
 		if (!slot->bootname)
 			continue;
 
-		if (!r_boot_get_state(slot, &slot->boot_good, &ierror)) {
+		if (!r_boot_get_state(slot, &boot_good, &ierror)) {
 			g_message("Failed to get boot state of '%s': %s", slot->name, ierror->message);
 			had_errors = TRUE;
+			slot->boot_state = ST_BOOT_UNKNOWN;
+		} else {
+			slot->boot_state = boot_good ? ST_BOOT_GOOD : ST_BOOT_BAD;
 		}
 	}
 
@@ -679,6 +687,7 @@ static gchar **add_system_environment(gchar **envp)
 	g_return_val_if_fail(envp, NULL);
 
 	envp = g_environ_setenv(envp, "RAUC_SYSTEM_CONFIG", r_context()->configpath, TRUE);
+	envp = g_environ_setenv(envp, "RAUC_SYSTEM_COMPATIBLE", r_context()->config->system_compatible ?: "", TRUE);
 	envp = g_environ_setenv(envp, "RAUC_SYSTEM_VARIANT", r_context()->config->system_variant ?: "", TRUE);
 	envp = g_environ_setenv(envp, "RAUC_CURRENT_BOOTNAME", r_context()->bootslot, TRUE);
 	envp = g_environ_setenv(envp, "RAUC_MOUNT_PREFIX", r_context()->config->mount_prefix, TRUE);
@@ -784,7 +793,7 @@ static gchar **prepare_environment(gchar *update_source, RaucManifest *manifest,
 		g_clear_pointer(&varname, g_free);
 
 		varname = g_strdup_printf("RAUC_SLOT_BOOTNAME_%i", slotcnt);
-		envp = g_environ_setenv(envp, varname, slot->bootname ? slot->bootname : "", TRUE);
+		envp = g_environ_setenv(envp, varname, slot->bootname ?: "", TRUE);
 		g_clear_pointer(&varname, g_free);
 
 		varname = g_strdup_printf("RAUC_SLOT_PARENT_%i", slotcnt);
@@ -1130,7 +1139,7 @@ static gboolean handle_slot_install_plan(const RaucManifest *manifest, const RIm
 	r_context_begin_step_weighted_formatted("check_slot", 0, 1, "Checking slot %s%s%s%s",
 			plan->target_slot->name,
 			plan->target_slot->bootname ? " (" : "",
-			plan->target_slot->bootname ? plan->target_slot->bootname : "",
+			plan->target_slot->bootname ?: "",
 			plan->target_slot->bootname ? ")" : "");
 
 	r_slot_status_load(plan->target_slot);
@@ -1190,9 +1199,6 @@ static gboolean handle_slot_install_plan(const RaucManifest *manifest, const RIm
 			return FALSE;
 		}
 	}
-
-	g_free(slot_state->status);
-	slot_state->status = g_strdup("update");
 
 	r_context_end_step("check_slot", TRUE);
 
@@ -1498,12 +1504,14 @@ static gboolean launch_and_wait_default_handler(RaucInstallArgs *args, gchar* bu
 				r_context_end_step("update_slots", FALSE);
 				return FALSE;
 			}
+			args->updated_slots = TRUE;
 		} else if (plan->target_repo) {
 			if (!handle_artifact_install_plan(manifest, plan, args, hook_name, &ierror)) {
 				g_propagate_error(error, ierror);
 				r_context_end_step("update_slots", FALSE);
 				return FALSE;
 			}
+			args->updated_artifacts = TRUE;
 		}
 	}
 

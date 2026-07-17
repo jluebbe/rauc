@@ -65,6 +65,16 @@ static gboolean validate_filename_requirements(RaucImage *image, GError **error)
 		}
 	}
 
+	if (image->adaptive && !image->filename) {
+		g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_PARSE_ERROR, "'adaptive' requires 'filename' to be set");
+		return FALSE;
+	}
+
+	if (image->convert && !image->filename) {
+		g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_PARSE_ERROR, "'convert' requires 'filename' to be set");
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -175,13 +185,6 @@ static gboolean parse_image(GKeyFile *key_file, const gchar *group, RaucImage **
 					"Unsupported image type '%s'", iimage->type);
 			return FALSE;
 		}
-	}
-
-	/* All requirements to check if a filename is necessary have been collected,
-	 * so we can now check if the current state is valid */
-	if (!validate_filename_requirements(iimage, &ierror)) {
-		g_propagate_error(error, ierror);
-		return FALSE;
 	}
 
 	g_key_file_remove_key(key_file, group, "version", NULL);
@@ -566,6 +569,17 @@ static gboolean check_manifest_common(const RaucManifest *mf, GError **error)
 		return FALSE;
 	}
 
+	for (GList *l = mf->images; l != NULL; l = l->next) {
+		RaucImage *image = l->data;
+		GError *ierror = NULL;
+		/* All requirements to check if a filename is necessary have been collected,
+		 * so we can now check if the current state is valid */
+		if (!validate_filename_requirements(image, &ierror)) {
+			g_propagate_error(error, ierror);
+			return FALSE;
+		}
+	}
+
 	return TRUE;
 }
 
@@ -615,6 +629,11 @@ static gboolean check_manifest_bundled(const RaucManifest *mf, GError **error)
 		if (!image->filename)
 			continue;
 
+		if (strchr(image->filename, '/')) {
+			g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR, "Image filename %s must not contain '/'", image->filename);
+			return FALSE;
+		}
+
 		if (image->checksum.type != G_CHECKSUM_SHA256) {
 			g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR, "Unsupported checksum algorithm for image %s", image->filename);
 			return FALSE;
@@ -649,6 +668,15 @@ static gboolean check_manifest_bundled(const RaucManifest *mf, GError **error)
 			if (expected_len != image->converted->len) {
 				g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR, "Inconsistent number of converted inputs/outputs for image %s", image->filename);
 				return FALSE;
+			}
+
+			for (guint i = 0; i < image->converted->len; i++) {
+				const gchar *converted = g_ptr_array_index(image->converted, i);
+
+				if (strchr(converted, '/')) {
+					g_set_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR, "Converted image filename %s must not contain '/'", converted);
+					return FALSE;
+				}
 			}
 		}
 	}

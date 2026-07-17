@@ -61,6 +61,10 @@ typedef struct {
 	gchar *bootslot;
 	gchar *boot_id;
 	gchar *machine_id;
+	/* kernel commandline (real or testing override) */
+	gchar *cmdline;
+	/* runtime direcrory (/run/rauc or testing override) */
+	gchar *runtime_directory;
 
 	gchar *system_serial;
 	gchar *system_version;
@@ -76,6 +80,7 @@ typedef struct {
 	struct {
 		/* mock contents of /proc/cmdline */
 		const gchar *proc_cmdline;
+		gint64 polling_speedup;
 	} mock;
 } RaucContext;
 

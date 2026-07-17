@@ -6,6 +6,7 @@ import logging
 import os
 import shlex
 import subprocess
+from pathlib import Path
 
 
 def logger_from_command(command):
@@ -14,7 +15,7 @@ def logger_from_command(command):
     python module,
     """
     cmd_parts = command.split()
-    base_cmd = os.path.basename(cmd_parts[0])
+    base_cmd = Path(cmd_parts[0]).name
     try:
         if base_cmd.startswith("python") and cmd_parts[1] == "-m":
             base_cmd = command.split()[2]
@@ -24,7 +25,7 @@ def logger_from_command(command):
     return logging.getLogger(base_cmd)
 
 
-def run(command, *, timeout=30):
+def run(command, *, timeout=30, extra_env=None):
     """
     Runs given command as subprocess with DBUS_STARTER_BUS_TYPE=session and PATH+=./build. Blocks
     until command terminates. Logs command and its stdout/stderr/exit code (use
@@ -34,7 +35,11 @@ def run(command, *, timeout=30):
     logger = logger_from_command(command)
     logger.info("running: %s", command)
 
-    proc = subprocess.run(shlex.split(command), capture_output=True, text=True, check=False, timeout=timeout)
+    env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
+
+    proc = subprocess.run(shlex.split(command), capture_output=True, text=True, check=False, timeout=timeout, env=env)
 
     for line in proc.stdout.splitlines():
         if line:

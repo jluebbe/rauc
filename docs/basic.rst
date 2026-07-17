@@ -44,6 +44,7 @@ A key design decision of RAUC is that signing a bundle is mandatory.
 For development purpose a self-signed certificate might be sufficient,
 for production the signing process should be integrated with your PKI
 infrastructure.
+Read the :ref:`sec-security` chapter for more details on signing bundles.
 
 .. important:: A RAUC Bundle should always unambiguously describe the
   intended target state of the entire system.
@@ -116,7 +117,7 @@ projects.
 
 As a result, users that update at least every two years (for example by
 following Yocto LTS releases) should receive deprecation warnings early enough
-to handling them via normal updates.
+to handle them via normal updates.
 
 RAUC's System View
 ------------------
@@ -138,7 +139,7 @@ Slots
 
 In RAUC, any partition, full device or volume that can be updated is a *slot*.
 
-To let RAUC know which slots exists on the board that should be handled,
+To let RAUC know which slots exist on the board that should be handled,
 the slots must be configured in a *system configuration file*.
 This file is the central instance that tells RAUC how to handle the board, which
 bootloader to use, which custom scripts to execute, etc.
@@ -168,8 +169,9 @@ Now, multiple slots of different classes can be grouped as a *slot group*.
 Such a group is the base for the slot selection algorithm of RAUC.
 
 Consider, for example, a system with two redundant rootfs slots and two
-redundant application slots. Then you group them together to have a fixed set
-of a rootfs and application slot each that will be used together.
+redundant application slots.
+Then you group them together to have a fixed set of a rootfs and application
+slot each that will be used together.
 
 .. image:: images/rauc-multi-image.svg
    :width: 500

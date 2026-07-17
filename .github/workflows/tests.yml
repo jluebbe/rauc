@@ -1,6 +1,13 @@
 name: tests
 
-on: [push, pull_request]
+on:
+  push:
+    paths-ignore:
+      - 'docs/**'
+  pull_request: {}
+
+permissions:
+  contents: read
 
 jobs:
   build:
@@ -16,7 +23,7 @@ jobs:
         gcc --version
         ls -l /dev/kvm || true
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Test with service, gpt and composefs
       run: |
@@ -28,7 +35,7 @@ jobs:
         lcov --directory . --capture --output-file "service.info"
         
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
       with:
         files: service.info
         flags: "service=true"
@@ -45,7 +52,7 @@ jobs:
         lcov --directory . --capture --output-file "noservice.info"
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
       with:
         files: noservice.info
         flags: "service=false"
@@ -59,13 +66,6 @@ jobs:
         meson configure build
         meson compile -C build
         meson test -C build --suite rauc:fuzzing
-        
-    - name: Build documentation
-      run: |
-        rm -rf build/
-        meson setup -Dtests=false -Dhtmldocs=true build
-        meson configure build
-        meson compile -C build
 
     - name: Build CGI example
       run: |
@@ -102,7 +102,7 @@ jobs:
         - "arm64/v8"
         - "386"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Install QEMU
       run: |
@@ -136,15 +136,16 @@ jobs:
       fail-fast: false
       matrix:
         release:
-        - "ubuntu:20.04"
         - "ubuntu:22.04"
         - "ubuntu:24.04"
-        - "debian:bullseye"
+        - "ubuntu:26.04"
         - "debian:bookworm"
         - "debian:trixie"
         - "debian:testing"
         include:
         - release: "ubuntu:24.04"
+          test: true
+        - release: "ubuntu:26.04"
           test: true
         - release: "debian:bookworm"
           test: true
@@ -153,7 +154,7 @@ jobs:
         - release: "debian:testing"
           test: true
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
     - name: Prepare ${{ matrix.release }} container for meson build
       run: |
@@ -171,7 +172,7 @@ jobs:
     - name: Install test dependencies
       if: ${{ matrix.test }}
       run: |
-        podman exec -e DEBIAN_FRONTEND='noninteractive' -i -u root stable apt-get install -qy python3-pytest python3-dasbus python3-aiohttp python3-requests python3-pyasn1 python3-pyasn1-modules openssl e2fsprogs grub-common faketime
+        podman exec -e DEBIAN_FRONTEND='noninteractive' -i -u root stable apt-get install -qy python3-pytest python3-dasbus python3-aiohttp python3-requests python3-pyasn1 python3-pyasn1-modules openssl e2fsprogs grub-common faketime dbus-daemon
 
     - name: Configure
       run: |

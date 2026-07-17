@@ -11,12 +11,12 @@ from helper import slot_data_from_json
 pytestmark = root
 
 
-def test_install(rauc_dbus_service_with_system, tmp_path):
+def test_install(rauc_dbus_service_with_system, tmp_path, system):
     assert os.path.exists(tmp_path / "images/rootfs-1")
     assert not os.path.getsize(tmp_path / "images/rootfs-1") > 0
-    assert os.path.isdir("/run/rauc/slots/active")
-    assert os.path.islink("/run/rauc/slots/active/rootfs")
-    assert os.readlink("/run/rauc/slots/active/rootfs")
+    assert os.path.isdir(system.run_dir / "slots/active")
+    assert os.path.islink(system.run_dir / "slots/active/rootfs")
+    assert os.readlink(system.run_dir / "slots/active/rootfs")
 
     out, err, exitcode = run("rauc status --output-format=json-pretty")
     assert exitcode == 0
@@ -94,6 +94,33 @@ def test_install_env(rauc_dbus_service_with_system_adaptive, tmp_path):
         post_lines = f.readlines()
 
     assert post_lines == pre_lines
+
+
+def test_install_hash_index_too_large(tmp_path, create_system_files, system, capfd):
+    system.prepare_minimal_config()
+    system.write_config()
+
+    assert (tmp_path / "images/appfs-1").is_file()
+    assert (tmp_path / "images/appfs-1").stat().st_size == 0
+    # create a slot "device" which would need a too large block-hash-index
+    with (tmp_path / "images/appfs-1").open("wb") as f:
+        f.truncate(2**32 // 32 * 4096)
+
+    bundle_name = "good-adaptive-meta-bundle.raucb"
+
+    # copy to tmp path for safe ownership check
+    shutil.copyfile(bundle_name, tmp_path / bundle_name)
+
+    with system.running_service("A"):
+        out, err, exitcode = run(f"rauc install {tmp_path}/{bundle_name}")
+
+        assert exitcode == 0
+
+    captured = capfd.readouterr()
+    assert (
+        "Continuing after adaptive mode error: failed to open target slot hash index for appfs.1: image/partition size (549755813888) is too large"
+        in captured.err
+    )
 
 
 @have_casync
