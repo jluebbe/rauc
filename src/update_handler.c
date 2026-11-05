@@ -1407,6 +1407,7 @@ static gboolean run_slot_hook_extra_env(const gchar *hook_name, const gchar *hoo
 
 	g_subprocess_launcher_setenv(launcher, "RAUC_SYSTEM_COMPATIBLE", r_context()->config->system_compatible ?: "", TRUE);
 	g_subprocess_launcher_setenv(launcher, "RAUC_SYSTEM_VARIANT", r_context()->config->system_variant ?: "", TRUE);
+	g_subprocess_launcher_setenv(launcher, "RAUC_SYSTEM_VERSION", r_context()->system_version ?: "", TRUE);
 
 	g_subprocess_launcher_setenv(launcher, "RAUC_SLOT_NAME", slot->name, TRUE);
 	g_subprocess_launcher_setenv(launcher, "RAUC_SLOT_STATE", r_slot_slotstate_to_str(slot->state), TRUE);
@@ -2347,11 +2348,22 @@ static gboolean img_to_boot_emmc_handler(RaucImage *image, RaucSlot *dest_slot, 
 	/* read active boot partition from ext_csd */
 	res = r_emmc_read_bootpart(realdev, &part_active, &ierror);
 	if (!res) {
-		g_propagate_error(error, ierror);
-		return FALSE;
-	}
-
-	if (part_active == -1) {
+		/* An active user partition (UDA) is not a valid boot partition,
+		 * but was historically supported. Preserve that behaviour by
+		 * only warning and continuing instead of aborting. Reserved or
+		 * otherwise invalid values are still rejected below. */
+		if (g_error_matches(ierror, R_EMMC_ERROR, R_EMMC_ERROR_BOOTPART_UDA)) {
+			g_warning("%s Check your setup! Continuing using boot1 for the update.", ierror->message);
+			g_clear_error(&ierror);
+			/* For simplicity: Consider boot0 to be active, so that the
+			 * (inactive) boot1 partition is used as update target, matching
+			 * the behaviour prior to the UDA sanity check being added. */
+			part_active = 0;
+		} else {
+			g_propagate_error(error, ierror);
+			return FALSE;
+		}
+	} else if (part_active == -1) {
 		g_warning("eMMC device was not enabled for booting, yet. Ignoring.");
 		/* For simplicity: Consider boot1 to be active */
 		part_active = 1;
@@ -2363,6 +2375,10 @@ static gboolean img_to_boot_emmc_handler(RaucImage *image, RaucSlot *dest_slot, 
 	 * partition as device.
 	 */
 	part_slot = g_new0(RaucSlot, 1);
+	part_slot->name = dest_slot->name;
+	part_slot->sclass = dest_slot->sclass;
+	part_slot->type = g_strdup(dest_slot->type);
+	part_slot->state = dest_slot->state;
 	part_slot->device = g_strdup_printf(
 			"%sboot%d",
 			realdev,

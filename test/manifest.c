@@ -91,6 +91,7 @@ static void check_manifest_contents(const RaucManifest *rm)
 	g_assert_nonnull(rm);
 	g_assert_cmpstr(rm->update_compatible, ==, "BarCorp FooBazzer");
 	g_assert_cmpstr(rm->update_version, ==, "2011.03-1");
+	g_assert_cmpstr(rm->update_min_rauc_version, ==, "1.14");
 	g_assert_cmpstr(rm->handler_name, ==, "myhandler.sh");
 	g_assert_cmpstr(rm->handler_args, ==, "--foo");
 	g_assert_cmpstr(rm->hook_name, ==, "hook.sh");
@@ -167,6 +168,7 @@ static void test_save_load_manifest(void)
 
 	rm->update_compatible = g_strdup("BarCorp FooBazzer");
 	rm->update_version = g_strdup("2011.03-1");
+	rm->update_min_rauc_version = g_strdup("1.14");
 	rm->bundle_format_explicit = TRUE;
 	rm->handler_name = g_strdup("myhandler.sh");
 	rm->handler_args = g_strdup("--foo");
@@ -750,7 +752,7 @@ version=2015.04-1\n\
 \n\
 [image.rootfs]\n\
 filename=rootfs-default.ext4\n\
-sha256=0815\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
 size=1\n\
 hooks=install;pre-install\n\
 ";
@@ -787,7 +789,7 @@ version=2015.04-1\n\
 \n\
 [image.rootfs]\n\
 filename=rootfs-default.ext4\n\
-sha256=0815\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
 size=1\n\
 hooks=install\n\
 ";
@@ -829,7 +831,7 @@ filename=demo.hook\n\
 \n\
 [image.rootfs]\n\
 filename=rootfs-default.ext4\n\
-sha256=0815\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
 ";
 	const gchar *mffile_valid = "\
 [update]\n\
@@ -841,7 +843,7 @@ filename=demo.hook\n\
 \n\
 [image.rootfs]\n\
 filename=rootfs-default.ext4\n\
-sha256=0815\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
 hooks=install\n\
 ";
 
@@ -894,7 +896,7 @@ version=2015.04-1\n\
 \n\
 [image.rootfs]\n\
 filename=../../../../tmp/rootfs-default.ext4\n\
-sha256=0815\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
 size=1\n\
 ";
 
@@ -909,6 +911,130 @@ size=1\n\
 	g_assert_true(res);
 
 	res = check_manifest_internal(rm, &error);
+	g_assert_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR);
+	g_assert_false(res);
+}
+
+/* Check that a hook filename containing a '..' component is rejected for a
+ * manifest read from a bundle. The hook filename is joined onto the bundle
+ * content dir and executed, so a '..' component would escape the content dir.
+ * A plain sub-directory like 'some-dir/hook.sh' stays valid.
+ */
+static void test_manifest_hook_filename_with_dotdot(void)
+{
+	g_autofree gchar *tmpdir = NULL;
+	g_autofree gchar *manifestpath = NULL;
+	g_autoptr(RaucManifest) rm = NULL;
+	gboolean res = FALSE;
+	g_autoptr(GError) error = NULL;
+	const gchar *mffile = "\
+[update]\n\
+compatible=FooCorp Super BarBazzer\n\
+version=2015.04-1\n\
+\n\
+[hooks]\n\
+filename=../../../../tmp/evil.sh\n\
+\n\
+[image.rootfs]\n\
+filename=rootfs-default.ext4\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
+size=1\n\
+hooks=pre-install\n\
+";
+
+	tmpdir = g_dir_make_tmp("rauc-XXXXXX", NULL);
+	g_assert_nonnull(tmpdir);
+
+	manifestpath = write_tmp_file(tmpdir, "manifest.raucm", mffile, NULL);
+	g_assert_nonnull(manifestpath);
+
+	res = load_manifest_file(manifestpath, &rm, &error);
+	g_assert_no_error(error);
+	g_assert_true(res);
+
+	res = check_manifest_internal(rm, &error);
+	g_assert_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR);
+	g_assert_false(res);
+}
+
+/* Check that an image digest which is not a plain hex digest is rejected for a
+ * manifest read from a bundle, as the digest is used to build paths below the
+ * artifact repository and below the slot data directory.
+ */
+static void test_manifest_image_digest_not_hex(void)
+{
+	g_autofree gchar *tmpdir = NULL;
+	g_autofree gchar *manifestpath = NULL;
+	g_autoptr(RaucManifest) rm = NULL;
+	gboolean res = FALSE;
+	g_autoptr(GError) error = NULL;
+	const gchar *mffile = "\
+[update]\n\
+compatible=FooCorp Super BarBazzer\n\
+version=2015.04-1\n\
+\n\
+[image.rootfs]\n\
+filename=rootfs-default.ext4\n\
+sha256=../../../../tmp/rootfs-default.ext4-payload-aaaaaaaaaaaaaaaaaaaa\n\
+size=1\n\
+";
+
+	tmpdir = g_dir_make_tmp("rauc-XXXXXX", NULL);
+	g_assert_nonnull(tmpdir);
+
+	manifestpath = write_tmp_file(tmpdir, "manifest.raucm", mffile, NULL);
+	g_assert_nonnull(manifestpath);
+
+	res = load_manifest_file(manifestpath, &rm, &error);
+	g_assert_no_error(error);
+	g_assert_true(res);
+
+	res = check_manifest_internal(rm, &error);
+	g_assert_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR);
+	g_assert_false(res);
+}
+
+/* Check that an artifact name containing a '/' is rejected for a manifest read
+ * from a bundle. The artifact name comes from the group header and is used as a
+ * single path component of the .artifact-<name>-<digest> entry in the artifact
+ * repository, so a '/' would turn it into a nested path. Artifacts are only
+ * allowed in verity/crypt bundles, so this uses the external manifest path.
+ */
+static void test_manifest_artifact_name_with_slash(void)
+{
+	g_autofree gchar *tmpdir = NULL;
+	g_autofree gchar *manifestpath = NULL;
+	g_autoptr(RaucManifest) rm = NULL;
+	gboolean res = FALSE;
+	g_autoptr(GError) error = NULL;
+	const gchar *mffile = "\
+[update]\n\
+compatible=FooCorp Super BarBazzer\n\
+version=2015.04-1\n\
+\n\
+[bundle]\n\
+format=verity\n\
+verity-hash=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
+verity-salt=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
+verity-size=4096\n\
+\n\
+[image.pkgs/sub/app]\n\
+filename=app.raucb\n\
+sha256=e437f5cf0e26c1c4f81a92a29c92a8fb3e0f4ce8fbc4e2e0a1eff56b09b26cba\n\
+size=1\n\
+";
+
+	tmpdir = g_dir_make_tmp("rauc-XXXXXX", NULL);
+	g_assert_nonnull(tmpdir);
+
+	manifestpath = write_tmp_file(tmpdir, "manifest.raucm", mffile, NULL);
+	g_assert_nonnull(manifestpath);
+
+	res = load_manifest_file(manifestpath, &rm, &error);
+	g_assert_no_error(error);
+	g_assert_true(res);
+
+	res = check_manifest_external(rm, &error);
 	g_assert_error(error, R_MANIFEST_ERROR, R_MANIFEST_CHECK_ERROR);
 	g_assert_false(res);
 }
@@ -1064,6 +1190,9 @@ int main(int argc, char *argv[])
 	g_test_add_func("/manifest/missing_hook_name", test_manifest_missing_hook_name);
 	g_test_add_func("/manifest/missing_image_size", test_manifest_missing_image_size);
 	g_test_add_func("/manifest/image_filename_with_slash", test_manifest_image_filename_with_slash);
+	g_test_add_func("/manifest/hook_filename_with_dotdot", test_manifest_hook_filename_with_dotdot);
+	g_test_add_func("/manifest/image_digest_not_hex", test_manifest_image_digest_not_hex);
+	g_test_add_func("/manifest/artifact_name_with_slash", test_manifest_artifact_name_with_slash);
 	g_test_add_func("/manifest/invalid_data", test_invalid_data);
 
 	return g_test_run();

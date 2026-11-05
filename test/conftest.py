@@ -2,17 +2,19 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
 import time
-from functools import cache
 from configparser import ConfigParser
+from contextlib import contextmanager
+from functools import cache
+from io import BytesIO
 from pathlib import Path
 from random import Random
-from contextlib import contextmanager
 
 import pytest
+import requests
 from dasbus.connection import SessionMessageBus
 from dasbus.error import DBusError
-import requests
 
 from helper import run
 
@@ -30,7 +32,7 @@ shutil._USE_CP_SENDFILE = False
 
 meson_build = os.environ.get("MESON_BUILD_DIR")
 if not meson_build:
-    raise Exception("Please set MESON_BUILD_DIR to point to the meson build directory.")
+    raise pytest.UsageError("Please set MESON_BUILD_DIR to point to the meson build directory.")
 if not Path(meson_build).is_absolute():
     meson_build = os.path.abspath(meson_build)
 
@@ -171,31 +173,31 @@ needs_nbd = pytest.mark.skipif("RAUC_TEST_NBD_SERVER" not in os.environ, reason=
 
 
 def softhsm2_load_key_pair(cert, privkey, label, id_, softhsm2_mod, tmp_path):
-    proc = subprocess.run(
+    subprocess.run(
         f"pkcs11-tool --module {softhsm2_mod} -l --pin 1111 -y cert -w {cert} --label {label} --id {id_}",
         shell=True,
+        check=True,
     )
-    assert proc.returncode == 0
 
     pubkey_file = tmp_path / f"pubkey_{label}.pem"
 
-    proc = subprocess.run(
+    subprocess.run(
         f"openssl rsa -in {privkey} -inform pem -pubout -outform pem -out {pubkey_file}",
         shell=True,
+        check=True,
     )
-    assert proc.returncode == 0
 
-    proc = subprocess.run(
+    subprocess.run(
         f"pkcs11-tool --module {softhsm2_mod} -l --pin 1111 -y pubkey -w {pubkey_file} --label {label} --id {id_}",
         shell=True,
+        check=True,
     )
-    assert proc.returncode == 0
 
-    proc = subprocess.run(
+    subprocess.run(
         f"pkcs11-tool --module {softhsm2_mod} -l --pin 1111 -y privkey -w {privkey} --label {label} --id {id_}",
         shell=True,
+        check=True,
     )
-    assert proc.returncode == 0
 
 
 def softhsm2_test_signature(tmp_path, cert, label, ca):
@@ -482,6 +484,15 @@ class Bundle:
         path = self.content / self.manifest[f"image.{image_name}"]["filename"]
         self._make_random_file(path, size, seed)
 
+    def make_tar_image(self, image_name, contents):
+        path = self.content / self.manifest[f"image.{image_name}"]["filename"]
+
+        with tarfile.open(name=path, mode="w") as t:
+            for filename, data in contents.items():
+                f = tarfile.TarInfo(name=filename)
+                f.size = len(data)
+                t.addfile(f, BytesIO(data))
+
     def add_hook_script(self, hook_script):
         path = self.content / "hook.sh"
         with open(path, "w") as f:
@@ -669,7 +680,7 @@ class System:
             time.sleep(0.1)
             try:
                 self.proxy = bus.get_proxy("de.pengutronix.rauc", "/")
-                self.proxy.Operation  # try to access the service
+                _ = self.proxy.Operation  # try to access the service
                 break
             except DBusError:
                 if time.monotonic() > timeout:
@@ -709,22 +720,28 @@ class HTTPServer:
             return
         assert self.server is None
 
+        start = time.monotonic()
         self.server = subprocess.Popen(["python3", "nginx_backend.py"])
-        timeout = time.monotonic() + 5.0
+        timeout = start + 30.0
         while True:
             time.sleep(0.1)
             try:
-                resp = requests.get(f"{self.base}/")
+                resp = requests.get(f"{self.base}/", timeout=5)
                 resp.raise_for_status()
+                print(f"HTTP backend responsive after {time.monotonic() - start:.2f}s")
                 break
-            except requests.exceptions.ConnectionError:
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+            ):
                 if time.monotonic() > timeout:
+                    if self.server.poll() is not None:
+                        self.stop()
                     raise
 
     def stop(self):
-        if "RAUC_TEST_HTTP_SERVER" in os.environ:
+        if self.server is None:
             return
-        assert self.server is not None
 
         self.server.terminate()
         try:
@@ -732,6 +749,7 @@ class HTTPServer:
         except subprocess.TimeoutExpired:
             self.server.kill()
             self.server.wait()
+        self.server = None
 
     def setup(self, *, file_path=None, http_code=None):
         json = {}
