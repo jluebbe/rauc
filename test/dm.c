@@ -506,7 +506,8 @@ static void crypt_create(DMFixture *fixture,
 int main(int argc, char *argv[])
 {
 	DMData *dm_data;
-	gboolean valid_key;
+	gboolean valid_key = TRUE;
+	gboolean invalid_key = FALSE;
 
 	setlocale(LC_ALL, "C");
 
@@ -539,15 +540,11 @@ int main(int argc, char *argv[])
 	};
 	g_test_add("/dm/create_257", DMFixture, dm_data, dm_fixture_set_up, verity_hash_create, dm_fixture_tear_down);
 
-	valid_key = TRUE;
 	g_test_add("/dm/crypt_decrypt/valid_key", DMFixture, &valid_key, dm_fixture_set_up, crypt_decrypt_test, dm_fixture_tear_down);
-	valid_key = FALSE;
-	g_test_add("/dm/crypt_decrypt/invalid_key", DMFixture, &valid_key, dm_fixture_set_up, crypt_decrypt_test, dm_fixture_tear_down);
+	g_test_add("/dm/crypt_decrypt/invalid_key", DMFixture, &invalid_key, dm_fixture_set_up, crypt_decrypt_test, dm_fixture_tear_down);
 
-	valid_key = TRUE;
 	g_test_add("/dm/crypt_encrypt/valid_key", DMFixture, &valid_key, dm_fixture_set_up, crypt_encrypt_test, dm_fixture_tear_down);
-	valid_key = FALSE;
-	g_test_add("/dm/crypt_encrypt/invalid_key", DMFixture, &valid_key, dm_fixture_set_up, crypt_encrypt_test, dm_fixture_tear_down);
+	g_test_add("/dm/crypt_encrypt/invalid_key", DMFixture, &invalid_key, dm_fixture_set_up, crypt_encrypt_test, dm_fixture_tear_down);
 
 	g_test_add("/dm/crypt_create", DMFixture, NULL, dm_fixture_set_up, crypt_create, dm_fixture_tear_down);
 
